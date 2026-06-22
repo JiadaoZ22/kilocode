@@ -4,6 +4,7 @@ import { mockEmbeddingsCreate, openAIMockFactory, setOpenAIConstructorHook } fro
 mock.module("openai", openAIMockFactory)
 
 import { KiloEmbedder, KILO_INDEXING_FEATURE } from "../../../../src/indexing/embedders/kilo"
+import { REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS } from "../../../../src/indexing/constants"
 
 describe("KiloEmbedder", () => {
   beforeEach(() => {
@@ -34,6 +35,8 @@ describe("KiloEmbedder", () => {
         "X-KILOCODE-FEATURE": KILO_INDEXING_FEATURE,
         "X-KILOCODE-ORGANIZATIONID": "org_123",
       },
+      timeout: REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS,
+      maxRetries: 0,
     })
     expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
       input: ["hello"],

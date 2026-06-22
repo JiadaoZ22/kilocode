@@ -30,12 +30,21 @@ async function init(request: Extract<Request, { method: "init" }>) {
   telemetry = next.onTelemetry.on((data) => {
     send({ type: "event", event: "telemetry", data })
   })
-  await next.initialize(request.input.config)
-  send({ type: "result", id: request.id, method: "init", ok: true, value: normalizeIndexingStatus(next) })
+  try {
+    await next.initialize(request.input.config)
+    send({ type: "result", id: request.id, method: "init", ok: true, value: normalizeIndexingStatus(next) })
+  } catch (err) {
+    // Dispose the partially-initialized manager so later search requests do not
+    // interact with a broken state.
+    dispose()
+    throw err
+  }
 }
 
 onmessage = async (event: MessageEvent<Request>) => {
   const request = event.data
+  const requestId = request.id
+  const requestMethod = request.method
   try {
     if (request.method === "dispose") {
       dispose()
@@ -49,9 +58,20 @@ onmessage = async (event: MessageEvent<Request>) => {
       return
     }
 
-    await init(request)
+    if (request.method === "init") {
+      await init(request)
+      return
+    }
+
+    send({
+      type: "result",
+      id: requestId,
+      method: requestMethod,
+      ok: false,
+      error: `Unknown indexing worker method: ${requestMethod}`,
+    })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
-    send({ type: "result", id: request.id, method: request.method, ok: false, error })
+    send({ type: "result", id: requestId, method: requestMethod, ok: false, error })
   }
 }

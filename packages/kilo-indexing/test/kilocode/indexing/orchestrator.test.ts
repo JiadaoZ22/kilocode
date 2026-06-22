@@ -70,11 +70,10 @@ class Scanner {
     _directory: string,
     _onError?: (error: Error) => void,
     onFilesIndexed?: (indexedCount: number) => void,
-    onFileParsed?: () => void,
+    _onFileParsed?: () => void,
+    onFilesDiscovered?: (count: number) => void,
   ): Promise<{ stats: { processed: number; skipped: number }; totalBlockCount: number }> {
-    for (let i = 0; i < this.discovered; i += 1) {
-      onFileParsed?.()
-    }
+    onFilesDiscovered?.(this.discovered)
     onFilesIndexed?.(this.indexed)
     return {
       stats: {

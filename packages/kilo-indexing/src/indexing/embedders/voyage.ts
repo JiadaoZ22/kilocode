@@ -68,11 +68,15 @@ export class VoyageEmbedder implements IEmbedder {
    * @param model Optional model identifier (uses constructor model if not provided)
    * @returns Promise resolving to embedding response
    */
-  async createEmbeddings(texts: string[], model?: string): Promise<EmbeddingResponse> {
+  async createEmbeddings(
+    texts: string[],
+    model?: string,
+    context: "query" | "document" = "document",
+  ): Promise<EmbeddingResponse> {
     const modelToUse = model || this.modelId
 
-    // Apply model-specific query prefix if required
-    const queryPrefix = getModelQueryPrefix("voyage", modelToUse)
+    // Apply model-specific query prefix only for search queries
+    const queryPrefix = context === "query" ? getModelQueryPrefix("voyage", modelToUse) : undefined
     const processedTexts = queryPrefix
       ? texts.map((text, index) => {
           // Prevent double-prefixing

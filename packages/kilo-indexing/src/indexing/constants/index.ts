@@ -50,11 +50,17 @@ export const INITIAL_MANAGER_RECOVERY_DELAY_MS = 500
 export const REMOTE_EMBEDDER_VALIDATION_TIMEOUT_MS = 15_000
 export const REMOTE_EMBEDDER_VALIDATION_MAX_RETRIES = 0
 export const OLLAMA_EMBEDDER_REQUEST_TIMEOUT_MS = 120_000
+export const REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS = 120_000
 
 /**OpenAI Embedder */
 export const MAX_BATCH_TOKENS = 100000
 export const MAX_ITEM_TOKENS = 8191
 export const BATCH_PROCESSING_CONCURRENCY = 10
+
+/**OpenAI-Compatible Embedder */
+// Some OpenAI-compatible providers (e.g. Volcano Ark / Doubao) reject requests
+// with more than 10 inputs, so cap batches at that limit.
+export const OPENAI_COMPATIBLE_MAX_BATCH_INPUTS = 10
 
 /**Gemini Embedder */
 export const GEMINI_MAX_ITEM_TOKENS = 2048

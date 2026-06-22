@@ -38,9 +38,13 @@ export class KiloEmbedder implements IEmbedder {
     )
   }
 
-  async createEmbeddings(texts: string[], model?: string): Promise<EmbeddingResponse> {
+  async createEmbeddings(
+    texts: string[],
+    model?: string,
+    context: "query" | "document" = "document",
+  ): Promise<EmbeddingResponse> {
     try {
-      return await this.embedder.createEmbeddings(texts, model || this.model)
+      return await this.embedder.createEmbeddings(texts, model || this.model, context)
     } catch (err) {
       log.error("Kilo embedder error", {
         err: err instanceof Error ? err.message : String(err),

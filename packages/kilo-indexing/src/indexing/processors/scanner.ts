@@ -133,6 +133,7 @@ export class DirectoryScanner implements IDirectoryScanner {
     onError?: (error: Error) => void,
     onFilesIndexed?: (indexedCount: number) => void,
     onFileParsed?: () => void,
+    onFilesDiscovered?: (count: number) => void,
     mode: IndexingTelemetryMode = "full",
   ): Promise<{ stats: { processed: number; skipped: number }; totalBlockCount: number }> {
     // reset cooperative cancel flag on new full scan
@@ -153,8 +154,24 @@ export class DirectoryScanner implements IDirectoryScanner {
       maxDepth: Infinity,
     })
 
+    // Defensive filter: drop sockets, FIFOs, devices, directories, and broken
+    // symlinks. glob's nodir option does not exclude special files such as Unix
+    // domain sockets, which later crash embedders/parsers.
+    const regularPaths = (
+      await Promise.all(
+        allPaths.map(async (filePath) => {
+          try {
+            const s = await stat(filePath)
+            return s.isFile() ? filePath : undefined
+          } catch {
+            return undefined
+          }
+        }),
+      )
+    ).filter((filePath): filePath is string => filePath !== undefined)
+
     // Filter by supported extensions, ignore patterns, and excluded directories
-    const supportedPaths = allPaths.filter((filePath) => {
+    const supportedPaths = regularPaths.filter((filePath) => {
       const ext = path.extname(filePath).toLowerCase()
       const relativeFilePath = generateRelativeIgnorePath(filePath, scanWorkspace)
       if (!relativeFilePath) {
@@ -174,6 +191,7 @@ export class DirectoryScanner implements IDirectoryScanner {
       supportedFiles: supportedPaths.length,
     })
     this.emitFileCount(mode, allPaths.length, supportedPaths.length)
+    onFilesDiscovered?.(supportedPaths.length)
 
     // Initialize tracking variables
     const processedFiles = new Set<string>()
@@ -587,7 +605,7 @@ export class DirectoryScanner implements IDirectoryScanner {
 
         log.debug(`Creating embeddings for ${batchTexts.length} texts`)
 
-        const { embeddings } = await this.embedder.createEmbeddings(batchTexts)
+        const { embeddings } = await this.embedder.createEmbeddings(batchTexts, undefined, "document")
         log.debug(`Successfully created ${embeddings.length} embeddings`)
 
         // Prepare points for Qdrant

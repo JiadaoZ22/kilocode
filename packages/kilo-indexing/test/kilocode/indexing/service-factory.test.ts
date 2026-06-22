@@ -118,6 +118,43 @@ describe("CodeIndexServiceFactory", () => {
     }
   })
 
+  test("passes configured dimension to OpenAI-compatible embed requests", async () => {
+    const factory = createFactory({
+      embedderProvider: "openai-compatible",
+      openAiKey: undefined,
+      openAiCompatibleBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+      openAiCompatibleApiKey: "ark-test",
+      modelId: "doubao-embedding-vision",
+      modelDimension: 2048,
+    })
+
+    const testEmbedding = new Float32Array([0.25, 0.5])
+    const base64String = Buffer.from(testEmbedding.buffer).toString("base64")
+
+    mockEmbeddingsCreate.mockResolvedValue({
+      data: [
+        {
+          embedding: base64String,
+        },
+      ],
+      usage: {
+        prompt_tokens: 1,
+        total_tokens: 1,
+      },
+    })
+
+    const embedder = factory.createEmbedder()
+
+    await embedder.createEmbeddings(["hello"])
+
+    expect(mockEmbeddingsCreate).toHaveBeenCalledWith({
+      input: ["hello"],
+      model: "doubao-embedding-vision",
+      encoding_format: "base64",
+      dimensions: 2048,
+    })
+  })
+
   test("passes configured dimension to OpenRouter embed requests", async () => {
     const factory = createFactory({
       embedderProvider: "openrouter",

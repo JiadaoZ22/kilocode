@@ -475,7 +475,18 @@ export function DialogIndexing(props: DialogIndexingProps) {
   const sync = useSync()
   const sdk = props.useSDK()
   const toast = useToast()
-  const [global] = createResource(async () => (await sdk.client.global.config.get({})).data as Config | undefined)
+  const [global] = createResource(async () => {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Global config load timed out")), 10000),
+    )
+    try {
+      const response = await Promise.race([sdk.client.global.config.get({}), timeout])
+      return response.data as Config | undefined
+    } catch (err) {
+      console.warn("Failed to load global indexing config:", err)
+      return undefined
+    }
+  })
   const globalCfg = () => globalIndexing(global())
   const indexing = defaultIndexing(sync, globalCfg())
 

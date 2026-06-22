@@ -73,6 +73,10 @@ export namespace IndexingWorker {
       fail(event.error ?? new Error(event.message))
     }
 
+    task.onmessageerror = () => {
+      fail(new Error("Indexing worker message deserialization failed"))
+    }
+
     const call = <T>(request: Request, read: (message: Result) => T, allowStopping = false) => {
       if (stopped || (stopping && !allowStopping)) return Promise.reject(new Error("Indexing worker is disposed."))
       return new Promise<T>((resolve, reject) => {

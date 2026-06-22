@@ -250,8 +250,8 @@ export class CodeIndexOrchestrator {
     let cumulativeFilesFound = 0
     const batchErrors: Error[] = []
 
-    const handleFileParsed = () => {
-      cumulativeFilesFound += 1
+    const handleFilesDiscovered = (count: number) => {
+      cumulativeFilesFound = count
       this.stateManager.reportFileProgress(cumulativeFilesIndexed, cumulativeFilesFound)
     }
 
@@ -267,7 +267,8 @@ export class CodeIndexOrchestrator {
         batchErrors.push(batchError)
       },
       handleFilesIndexed,
-      handleFileParsed,
+      undefined,
+      handleFilesDiscovered,
       mode,
     )
 

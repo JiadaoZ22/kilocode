@@ -7,6 +7,8 @@ import {
   INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
   REMOTE_EMBEDDER_VALIDATION_MAX_RETRIES,
   REMOTE_EMBEDDER_VALIDATION_TIMEOUT_MS,
+  REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS,
+  OPENAI_COMPATIBLE_MAX_BATCH_INPUTS,
 } from "../constants"
 import { getDefaultModelId, getModelQueryPrefix } from "../model-registry"
 import { withValidationErrorHandling, type HttpError, formatEmbeddingError } from "../shared/validation-helpers"
@@ -87,6 +89,8 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
         baseURL: baseUrl,
         apiKey: apiKey,
         defaultHeaders: options.headers,
+        timeout: REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS,
+        maxRetries: 0,
       })
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error))
@@ -106,11 +110,17 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
    * @param model Optional model identifier
    * @returns Promise resolving to embedding response
    */
-  async createEmbeddings(texts: string[], model?: string): Promise<EmbeddingResponse> {
+  async createEmbeddings(
+    texts: string[],
+    model?: string,
+    context: "query" | "document" = "document",
+  ): Promise<EmbeddingResponse> {
     const modelToUse = model || this.defaultModelId
 
-    // Apply model-specific query prefix if required
-    const queryPrefix = getModelQueryPrefix("openai-compatible", modelToUse)
+    // Apply model-specific query prefix only for search queries. Instruction-tuned
+    // embedding models (e.g. Doubao, Nomic) expect retrieval queries to carry a
+    // task prefix while indexed documents are embedded without it.
+    const queryPrefix = context === "query" ? getModelQueryPrefix("openai-compatible", modelToUse) : undefined
     const processedTexts = queryPrefix
       ? texts.map((text, index) => {
           // Prevent double-prefixing
@@ -145,6 +155,13 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
           log.warn(`Text at index ${i} exceeds token limit (${itemTokens} > ${this.maxItemTokens})`)
           processedIndices.push(i)
           continue
+        }
+
+        // Some OpenAI-compatible providers cap the number of inputs per request
+        // (e.g. Volcano Ark / Doubao allows a maximum of 10). Stop adding to this
+        // batch once we reach the provider limit.
+        if (currentBatch.length >= OPENAI_COMPATIBLE_MAX_BATCH_INPUTS) {
+          break
         }
 
         if (currentBatchTokens + itemTokens <= MAX_BATCH_TOKENS) {
@@ -275,16 +292,17 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
         let response: OpenAIEmbeddingResponse
 
         if (isFullUrl) {
-          // Use direct HTTP request for full endpoint URLs
-          response = await this.makeDirectEmbeddingRequest(this.baseUrl, batchTexts, model)
+          const ctl = new AbortController()
+          const timer = setTimeout(() => ctl.abort(), REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS)
+          try {
+            response = await this.makeDirectEmbeddingRequest(this.baseUrl, batchTexts, model, ctl.signal)
+          } finally {
+            clearTimeout(timer)
+          }
         } else {
-          // Use OpenAI SDK for base URLs
           response = (await this.embeddingsClient.embeddings.create({
             input: batchTexts,
             model: model,
-            // OpenAI package (as of v4.78.1) has a parsing issue that truncates embedding dimensions to 256
-            // when processing numeric arrays, which breaks compatibility with models using larger dimensions.
-            // By requesting base64 encoding, we bypass the package's parser and handle decoding ourselves.
             encoding_format: "base64",
             ...(this.dimensions !== undefined ? { dimensions: this.dimensions } : {}),
           })) as OpenAIEmbeddingResponse

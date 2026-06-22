@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test"
 
 import {
   MAX_ITEM_TOKENS,
+  OPENAI_COMPATIBLE_MAX_BATCH_INPUTS,
   REMOTE_EMBEDDER_VALIDATION_MAX_RETRIES,
   REMOTE_EMBEDDER_VALIDATION_TIMEOUT_MS,
 } from "../../../../src/indexing/constants"
@@ -174,6 +175,31 @@ describe("OpenAICompatibleEmbedder", () => {
       })
     })
 
+    test("should apply Doubao query prefix only for query context", async () => {
+      const doubaoEmbedder = new OpenAICompatibleEmbedder(testBaseUrl, testApiKey, "doubao-embedding-vision")
+      const mockResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { prompt_tokens: 10, total_tokens: 15 },
+      }
+      mockEmbeddingsCreate.mockResolvedValue(mockResponse)
+
+      // Documents should not be prefixed
+      await doubaoEmbedder.createEmbeddings(["train model"], undefined, "document")
+      expect(mockEmbeddingsCreate).toHaveBeenLastCalledWith({
+        input: ["train model"],
+        model: "doubao-embedding-vision",
+        encoding_format: "base64",
+      })
+
+      // Queries should carry the retrieval instruction prefix
+      await doubaoEmbedder.createEmbeddings(["how to train"], undefined, "query")
+      expect(mockEmbeddingsCreate).toHaveBeenLastCalledWith({
+        input: ["为这个句子生成表示以用于检索相关文章：how to train"],
+        model: "doubao-embedding-vision",
+        encoding_format: "base64",
+      })
+    })
+
     test("should handle missing usage data gracefully", async () => {
       const testTexts = ["Hello world"]
       const mockResponse = {
@@ -298,6 +324,24 @@ describe("OpenAICompatibleEmbedder", () => {
 
         // Should be called once for normal texts
         expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(1)
+      })
+
+      test("should cap OpenAI-compatible batches at provider input limit", async () => {
+        const batchLimit = OPENAI_COMPATIBLE_MAX_BATCH_INPUTS
+        const totalTexts = batchLimit + 5
+        const testTexts = Array.from({ length: totalTexts }, (_, i) => `text${i}`)
+
+        mockEmbeddingsCreate.mockResolvedValue({
+          data: Array.from({ length: batchLimit }, (_, i) => ({ embedding: [i / 100, i / 100, i / 100] })),
+          usage: { prompt_tokens: 10, total_tokens: 15 },
+        })
+
+        await embedder.createEmbeddings(testTexts)
+
+        // Should split into two calls: one full batch and one partial batch
+        expect(mockEmbeddingsCreate).toHaveBeenCalledTimes(2)
+        expect((mockEmbeddingsCreate.mock.calls[0]![0] as any).input.length).toBe(batchLimit)
+        expect((mockEmbeddingsCreate.mock.calls[1]![0] as any).input.length).toBe(5)
       })
 
       test("should skip texts that exceed MAX_ITEM_TOKENS", async () => {

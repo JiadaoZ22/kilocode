@@ -7,6 +7,7 @@ import { IndexingStatus, disabledIndexingStatus } from "@kilocode/kilo-indexing/
 import { Telemetry } from "@kilocode/kilo-telemetry"
 import { fetchKiloEmbeddingModelCatalog } from "@kilocode/kilo-gateway"
 import { Instance } from "@/project/instance"
+import { ProjectID } from "@/project/schema"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -252,7 +253,16 @@ export namespace KiloIndexing {
     const globalConfig = await AppRuntime.runPromise(Config.Service.use((svc) => svc.getGlobal()))
     const global = globalConfig.indexing
     const merged = indexingWithKiloDefault({ ...global, ...cfg.indexing }, auth)
-    const cfgInput = await model(enrichKilo(input(merged, global), auth), auth)
+
+    // kilocode_change start - default indexing OFF for the global fallback
+    // project and ON for real project workspaces. Explicit config values are
+    // still respected.
+    const isGlobalProject = Instance.project.id === ProjectID.global
+    const mergedWithDefaults: IndexingConfig =
+      merged?.enabled === undefined ? { ...merged, enabled: !isGlobalProject } : merged
+    // kilocode_change end
+
+    const cfgInput = await model(enrichKilo(input(mergedWithDefaults, global), auth), auth)
     const box = { status: pending() }
     const current = () => box.status
     let disposed = false

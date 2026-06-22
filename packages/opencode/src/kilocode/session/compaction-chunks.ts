@@ -329,10 +329,41 @@ export namespace KiloCompactionChunks {
       const chunks = yield* split({ messages: input.messages, model: input.model, size })
       log.info("fallback", { chunks: chunks.length, concurrency: CONCURRENCY })
 
-      const partial = yield* Effect.forEach(chunks, (chunk) => summarize({ ...input, chunk, total: chunks.length }), {
-        concurrency: Math.min(CONCURRENCY, chunks.length),
+      // Show live progress on the summary message so users know /compact is
+      // actually working, especially when chunking large sessions.
+      const progressPartID = PartID.ascending()
+      yield* input.updatePart({
+        id: progressPartID,
+        messageID: input.target.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: `Compacting session summary (${chunks.length} chunks)...`,
       })
-      if (partial.some((item) => item.result !== "continue" || !item.output)) return "compact" as const
+
+      const partial: Output[] = []
+      for (let i = 0; i < chunks.length; i++) {
+        const result = yield* summarize({ ...input, chunk: chunks[i]!, total: chunks.length })
+        partial.push(result)
+        if (result.result !== "continue" || !result.output) {
+          // Leave the progress text in place so the user sees where it stopped.
+          return "compact" as const
+        }
+        yield* input.updatePart({
+          id: progressPartID,
+          messageID: input.target.id,
+          sessionID: input.sessionID,
+          type: "text",
+          text: `Compacting session summary... (${i + 1}/${chunks.length} chunks summarized)`,
+        })
+      }
+
+      yield* input.updatePart({
+        id: progressPartID,
+        messageID: input.target.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: `Compacting session summary... reducing ${chunks.length} partial summaries`,
+      })
 
       const final =
         chunks.length === 1 && (yield* large({ messages: chunks[0].messages, model: input.model, size }))
@@ -341,7 +372,7 @@ export namespace KiloCompactionChunks {
       if (!final || final.result !== "continue" || !final.output) return "compact" as const
 
       yield* input.updatePart({
-        id: PartID.ascending(),
+        id: progressPartID,
         messageID: input.target.id,
         sessionID: input.sessionID,
         type: "text",

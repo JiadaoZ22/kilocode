@@ -78,6 +78,7 @@ import { OpencodeKeymapProvider, registerOpencodeKeymap, useBindings, useOpencod
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogSettings } from "./component/dialog-settings"
 
 const appBindingCommands = [
   "command.palette.show",
@@ -476,6 +477,16 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
         hidden: true,
         run: () => {
           command.show()
+        },
+      },
+      {
+        name: "app.settings",
+        title: "Settings",
+        category: "System",
+        slashName: "settings",
+        slashAliases: ["config", "prefs"],
+        run: () => {
+          dialog.replace(() => <DialogSettings />)
         },
       },
       {

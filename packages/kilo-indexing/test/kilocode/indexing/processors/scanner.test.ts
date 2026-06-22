@@ -18,7 +18,11 @@ import { loadIgnore } from "../../../../src/indexing/shared/load-ignore"
 import { DirectoryScanner } from "../../../../src/indexing/processors/scanner"
 
 class Emb implements IEmbedder {
-  public async createEmbeddings(texts: string[]): Promise<{ embeddings: number[][] }> {
+  public async createEmbeddings(
+    texts: string[],
+    _model?: string,
+    _context?: "query" | "document",
+  ): Promise<{ embeddings: number[][] }> {
     return {
       embeddings: texts.map(() => [0.1]),
     }
@@ -244,7 +248,7 @@ describe("DirectoryScanner", () => {
       },
     )
 
-    await scan.scanDirectory(root, undefined, undefined, undefined, "full")
+    await scan.scanDirectory(root, undefined, undefined, undefined, undefined, "full")
 
     const count = events.find((event) => event.type === "file_count")
     expect(count).toBeDefined()
@@ -252,6 +256,33 @@ describe("DirectoryScanner", () => {
     expect(count?.mode).toBe("full")
     expect(count?.source).toBe("scan")
     expect(count?.candidate).toBe(1)
+  })
+
+  test("reports discovered file count via callback", async () => {
+    const root = await mkdtemp(join(tmpdir(), "scanner-test-"))
+    const cacheDir = await mkdtemp(join(tmpdir(), "scanner-cache-"))
+    await Bun.write(join(root, "a.ts"), "export const a = 1\n")
+    await Bun.write(join(root, "b.ts"), "export const b = 2\n")
+    await Bun.write(join(root, "c.txt"), "not indexed\n")
+
+    const cache = new CacheManager(cacheDir, root)
+    await cache.initialize()
+
+    let discovered = 0
+    const scan = new DirectoryScanner(new Emb(), new Store(), new Parser(), cache, ignore(), 1, 1)
+
+    await scan.scanDirectory(
+      root,
+      undefined,
+      undefined,
+      undefined,
+      (count) => {
+        discovered = count
+      },
+      "full",
+    )
+
+    expect(discovered).toBe(2)
   })
 
   test("skips files matched by .kilocodeignore during full scans", async () => {
@@ -301,7 +332,7 @@ describe("DirectoryScanner", () => {
       },
     )
 
-    await scan.scanDirectory(root, undefined, undefined, undefined, "full")
+    await scan.scanDirectory(root, undefined, undefined, undefined, undefined, "full")
 
     const retry = events.find((event) => event.type === "batch_retry")
     expect(retry).toBeDefined()

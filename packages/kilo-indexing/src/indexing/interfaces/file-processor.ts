@@ -20,6 +20,7 @@ export interface IDirectoryScanner {
     onError?: (error: Error) => void,
     onFilesIndexed?: (indexedCount: number) => void,
     onFileParsed?: () => void,
+    onFilesDiscovered?: (count: number) => void,
     mode?: IndexingTelemetryMode,
   ): Promise<{
     stats: {

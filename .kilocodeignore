@@ -1,0 +1,8 @@
+# Kilo Code ignore patterns — large/binary/dependency directories
+Data/
+.venv*
+.venv.*/
+.dataprep_status/
+*.nii.gz
+*.nii
+__pycache__/

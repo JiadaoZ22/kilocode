@@ -7,6 +7,7 @@ import {
   INITIAL_RETRY_DELAY_MS as INITIAL_DELAY_MS,
   REMOTE_EMBEDDER_VALIDATION_MAX_RETRIES,
   REMOTE_EMBEDDER_VALIDATION_TIMEOUT_MS,
+  REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS,
 } from "../constants"
 import { getModelQueryPrefix } from "../model-registry"
 import { withValidationErrorHandling, formatEmbeddingError, type HttpError } from "../shared/validation-helpers"
@@ -28,7 +29,11 @@ export class OpenAiEmbedder implements IEmbedder {
    */
   constructor(apiKey: string, modelId?: string) {
     try {
-      this.embeddingsClient = new OpenAI({ apiKey })
+      this.embeddingsClient = new OpenAI({
+        apiKey,
+        timeout: REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS,
+        maxRetries: 0,
+      })
     } catch (error) {
       throw error instanceof Error ? error : new Error(String(error))
     }
@@ -42,11 +47,15 @@ export class OpenAiEmbedder implements IEmbedder {
    * @param model Optional model identifier
    * @returns Promise resolving to embedding response
    */
-  async createEmbeddings(texts: string[], model?: string): Promise<EmbeddingResponse> {
+  async createEmbeddings(
+    texts: string[],
+    model?: string,
+    context: "query" | "document" = "document",
+  ): Promise<EmbeddingResponse> {
     const modelToUse = model || this.defaultModelId
 
-    // Apply model-specific query prefix if required
-    const queryPrefix = getModelQueryPrefix("openai", modelToUse)
+    // Apply model-specific query prefix only for search queries
+    const queryPrefix = context === "query" ? getModelQueryPrefix("openai", modelToUse) : undefined
     const processedTexts = queryPrefix
       ? texts.map((text, index) => {
           // Prevent double-prefixing

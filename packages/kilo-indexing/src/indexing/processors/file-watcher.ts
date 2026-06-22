@@ -1,5 +1,6 @@
 import { watch as chokidarWatch, type FSWatcher as ChokidarFSWatcher } from "chokidar"
 import { stat, readFile } from "fs/promises"
+import { statSync } from "fs"
 import { createHash } from "crypto"
 import path from "path"
 import { v5 as uuidv5 } from "uuid"
@@ -133,7 +134,18 @@ export class FileWatcher implements IFileWatcher {
         const relativeFilePath = generateRelativeIgnorePath(filePath, this.workspacePath)
         if (!relativeFilePath) return false
         if (FileIgnore.match(relativeFilePath)) return true
-        return this.ignoreInstance?.ignores(relativeFilePath) ?? false
+        if (this.ignoreInstance?.ignores(relativeFilePath)) return true
+
+        // Defensive: never try to watch Unix sockets, FIFOs, or device nodes.
+        // inotify cannot watch sockets and throws ENXIO; chokidar surfaces that
+        // as a fatal error during initialization.
+        try {
+          const s = statSync(filePath)
+          return s.isSocket() || s.isFIFO() || s.isCharacterDevice() || s.isBlockDevice()
+        } catch {
+          // Broken symlink or inaccessible path; ignore it.
+          return true
+        }
       },
       persistent: true,
       ignoreInitial: true,
@@ -647,7 +659,7 @@ export class FileWatcher implements IFileWatcher {
       let pointsToUpsert: PointStruct[] = []
       if (this.embedder && blocks.length > 0) {
         const texts = blocks.map((block) => block.content)
-        const { embeddings } = await this.embedder.createEmbeddings(texts)
+        const { embeddings } = await this.embedder.createEmbeddings(texts, undefined, "document")
         if (embeddings.length !== blocks.length) {
           return {
             path: filePath,

@@ -259,6 +259,13 @@ await $`rm -rf dist`
 const kiloConsoleDist = await buildKiloConsole() // kilocode_change
 
 const binaries: Record<string, string> = {}
+// Version format: public-<public-base-version>_private-<private-version>
+// - public-base-version: upstream/public package version from packages/opencode/package.json
+// - private-version: our custom build identifier. For source/preview builds we display only
+//   the base semver (0.0.0); the full branch + timestamp remains in InstallationVersion for
+//   internal uniqueness. For release builds the private version is the bumped semver.
+const privateDisplayVersion = Script.version.startsWith("0.0.0-") ? "0.0.0" : Script.version
+const displayVersion = `public-${pkg.version}_private-${privateDisplayVersion}`
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
@@ -324,6 +331,7 @@ for (const item of targets) {
     // kilocode_change end
     define: {
       KILO_VERSION: `'${Script.version}'`,
+      KILO_DISPLAY_VERSION: `'${displayVersion}'`,
       KILO_MIGRATIONS: JSON.stringify(migrations),
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       KILO_WORKER_PATH: workerPath,

@@ -50,7 +50,37 @@ const profiles: Record<string, Record<string, ModelProfile>> = {
     "openai/text-embedding-3-large": { dimension: 3072, scoreThreshold: 0.4 },
     "google/gemini-embedding-2-preview": { dimension: 3072, scoreThreshold: 0.35 },
   },
-  "openai-compatible": {},
+  "openai-compatible": {
+    // Volcano Ark / Doubao embedding models. These are instruction-tuned:
+    // queries should carry the retrieval instruction prefix, while documents
+    // should be embedded without it. See:
+    // https://www.volcengine.com/docs/82379/1329508
+    "doubao-embedding-vision": {
+      dimension: 2048,
+      scoreThreshold: 0.4,
+      queryPrefix: "为这个句子生成表示以用于检索相关文章：",
+    },
+    "doubao-embedding-vision-251215": {
+      dimension: 2048,
+      scoreThreshold: 0.4,
+      queryPrefix: "为这个句子生成表示以用于检索相关文章：",
+    },
+    "doubao-embedding-vision-250615": {
+      dimension: 1024,
+      scoreThreshold: 0.4,
+      queryPrefix: "为这个句子生成表示以用于检索相关文章：",
+    },
+    "doubao-embedding-text-240515": {
+      dimension: 1024,
+      scoreThreshold: 0.4,
+      queryPrefix: "为这个句子生成表示以用于检索相关文章：",
+    },
+    "doubao-embedding-large-text-250515": {
+      dimension: 2048,
+      scoreThreshold: 0.4,
+      queryPrefix: "Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: ",
+    },
+  },
   "vercel-ai-gateway": {
     "text-embedding-3-small": { dimension: 1536, scoreThreshold: 0.4 },
   },
