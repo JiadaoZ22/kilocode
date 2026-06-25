@@ -46,6 +46,7 @@ export class VercelAiGatewayEmbedder implements IEmbedder {
       apiKey,
       this.modelId,
       MAX_ITEM_TOKENS,
+      { maxBatchInputs: Infinity },
     )
   }
 
@@ -94,6 +95,10 @@ export class VercelAiGatewayEmbedder implements IEmbedder {
   /**
    * Returns information about this embedder
    */
+  get maxBatchInputs(): number {
+    return this.openAICompatibleEmbedder.maxBatchInputs
+  }
+
   get embedderInfo(): EmbedderInfo {
     return {
       name: "vercel-ai-gateway",

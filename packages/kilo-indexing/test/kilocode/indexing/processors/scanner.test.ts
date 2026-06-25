@@ -191,7 +191,7 @@ describe("DirectoryScanner", () => {
     const emb = new Emb()
     const parser = new Parser()
     const store = new Store()
-    const scan = new DirectoryScanner(emb, store, parser, cache, ignore(), 1, 1)
+    const scan = new DirectoryScanner(emb, store, parser, cache, ignore(), [], 1, 1)
 
     const result = await scan.scanDirectory(root)
 
@@ -215,7 +215,7 @@ describe("DirectoryScanner", () => {
     const emb = new Emb()
     const parser = new ManyParser()
     const store = new FailStore()
-    const scan = new DirectoryScanner(emb, store, parser, cache, ignore(), 2, 1)
+    const scan = new DirectoryScanner(emb, store, parser, cache, ignore(), [], 2, 1)
 
     await scan.scanDirectory(root)
 
@@ -238,6 +238,7 @@ describe("DirectoryScanner", () => {
       new Parser(),
       cache,
       ignore(),
+      [],
       1,
       1,
       (event) => events.push(event),
@@ -269,7 +270,7 @@ describe("DirectoryScanner", () => {
     await cache.initialize()
 
     let discovered = 0
-    const scan = new DirectoryScanner(new Emb(), new Store(), new Parser(), cache, ignore(), 1, 1)
+    const scan = new DirectoryScanner(new Emb(), new Store(), new Parser(), cache, ignore(), [], 1, 1)
 
     await scan.scanDirectory(
       root,
@@ -298,7 +299,7 @@ describe("DirectoryScanner", () => {
     const cache = new CacheManager(cacheDir, root)
     await cache.initialize()
 
-    const scan = new DirectoryScanner(new Emb(), new Store(), new Parser(), cache, await loadIgnore(root), 1, 1)
+    const scan = new DirectoryScanner(new Emb(), new Store(), new Parser(), cache, await loadIgnore(root), [], 1, 1)
     const result = await scan.scanDirectory(root)
 
     expect(result.stats.processed).toBe(1)
@@ -322,6 +323,7 @@ describe("DirectoryScanner", () => {
       new Parser(),
       cache,
       ignore(),
+      [],
       1,
       2,
       (event) => events.push(event),

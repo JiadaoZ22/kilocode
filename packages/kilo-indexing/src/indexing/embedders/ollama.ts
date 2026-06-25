@@ -22,6 +22,8 @@ type OllamaModelsResult = {
  * Implements the IEmbedder interface using a local Ollama instance.
  */
 export class CodeIndexOllamaEmbedder implements IEmbedder {
+  // Ollama is local; input count is effectively limited by memory, not API.
+  readonly maxBatchInputs = Infinity
   private readonly baseUrl: string
   private readonly defaultModelId: string
   private readonly dimensions?: number

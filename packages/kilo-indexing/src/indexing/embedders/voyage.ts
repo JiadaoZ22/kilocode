@@ -43,6 +43,8 @@ interface VoyageEmbeddingResponse {
  * - voyage-law-2 (dimension: 1024)
  */
 export class VoyageEmbedder implements IEmbedder {
+  // Voyage AI supports batching many inputs in a single request.
+  readonly maxBatchInputs = Infinity
   private static readonly VOYAGE_BASE_URL = "https://api.voyageai.com/v1/embeddings"
   private static readonly DEFAULT_MODEL = "voyage-code-3"
   private readonly apiKey: string

@@ -17,6 +17,8 @@ const log = Log.create({ service: "embedder-bedrock" })
  * Amazon Bedrock implementation of the embedder interface with batching and rate limiting
  */
 export class BedrockEmbedder implements IEmbedder {
+  // Bedrock InvokeModel accepts one payload; embedders here send one text at a time.
+  readonly maxBatchInputs = 1
   private bedrockClient: BedrockRuntimeClient
   private readonly defaultModelId: string
 

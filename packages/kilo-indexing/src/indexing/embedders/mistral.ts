@@ -38,6 +38,7 @@ export class MistralEmbedder implements IEmbedder {
       apiKey,
       this.modelId,
       MAX_ITEM_TOKENS, // This is the max token limit (8191), not the embedding dimension
+      { maxBatchInputs: Infinity },
     )
   }
 
@@ -86,6 +87,10 @@ export class MistralEmbedder implements IEmbedder {
   /**
    * Returns information about this embedder
    */
+  get maxBatchInputs(): number {
+    return this.openAICompatibleEmbedder.maxBatchInputs
+  }
+
   get embedderInfo(): EmbedderInfo {
     return {
       name: "mistral",

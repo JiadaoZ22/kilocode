@@ -38,6 +38,7 @@ export class GeminiEmbedder implements IEmbedder {
       apiKey,
       this.modelId,
       GEMINI_MAX_ITEM_TOKENS,
+      { maxBatchInputs: Infinity },
     )
   }
 
@@ -86,6 +87,10 @@ export class GeminiEmbedder implements IEmbedder {
   /**
    * Returns information about this embedder
    */
+  get maxBatchInputs(): number {
+    return this.openAICompatibleEmbedder.maxBatchInputs
+  }
+
   get embedderInfo(): EmbedderInfo {
     return {
       name: "gemini",

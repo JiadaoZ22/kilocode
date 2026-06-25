@@ -48,8 +48,14 @@ export class DirectoryScanner implements IDirectoryScanner {
     private readonly onTelemetry?: IndexingTelemetryReporter,
     private readonly telemetryMeta?: IndexingTelemetryMeta,
   ) {
-    this.batchSegmentThreshold = batchSegmentThreshold ?? BATCH_SEGMENT_THRESHOLD
     this.maxBatchRetries = maxBatchRetries ?? MAX_BATCH_RETRIES
+    // Size batches to what the embedder can handle in a single request.
+    // For OpenAI-compatible providers such as Ark/Doubao this is 10 inputs,
+    // so each batch becomes one embedding request instead of 6 serial requests.
+    this.batchSegmentThreshold = Math.min(
+      batchSegmentThreshold ?? BATCH_SEGMENT_THRESHOLD,
+      embedder.maxBatchInputs,
+    )
   }
 
   private emitFileCount(mode: IndexingTelemetryMode, discovered: number, candidate: number): void {
@@ -118,7 +124,7 @@ export class DirectoryScanner implements IDirectoryScanner {
    * @param newThreshold New batch segment threshold value
    */
   public updateBatchSegmentThreshold(newThreshold: number): void {
-    this.batchSegmentThreshold = newThreshold
+    this.batchSegmentThreshold = Math.min(newThreshold, this.embedder.maxBatchInputs)
   }
 
   /**
@@ -158,24 +164,10 @@ export class DirectoryScanner implements IDirectoryScanner {
       maxDepth: Infinity,
     })
 
-    // Defensive filter: drop sockets, FIFOs, devices, directories, and broken
-    // symlinks. glob's nodir option does not exclude special files such as Unix
-    // domain sockets, which later crash embedders/parsers.
-    const regularPaths = (
-      await Promise.all(
-        allPaths.map(async (filePath) => {
-          try {
-            const s = await stat(filePath)
-            return s.isFile() ? filePath : undefined
-          } catch {
-            return undefined
-          }
-        }),
-      )
-    ).filter((filePath): filePath is string => filePath !== undefined)
-
-    // Filter by supported extensions, ignore patterns, and excluded directories
-    const supportedPaths = regularPaths.filter((filePath) => {
+    // Filter by supported extensions and ignore patterns BEFORE running stat().
+    // glob may still return special files (sockets, FIFOs) and the project may
+    // contain thousands of non-code files; stat()ing all of them is expensive.
+    const candidatePaths = allPaths.filter((filePath) => {
       const ext = path.extname(filePath).toLowerCase()
       const relativeFilePath = generateRelativeIgnorePath(filePath, scanWorkspace)
       if (!relativeFilePath) {
@@ -189,6 +181,22 @@ export class DirectoryScanner implements IDirectoryScanner {
 
       return scannerExtensions.includes(ext) && !this.ignoreInstance.ignores(relativeFilePath)
     })
+
+    // Defensive filter: drop sockets, FIFOs, devices, directories, and broken
+    // symlinks. glob's nodir option does not exclude special files such as Unix
+    // domain sockets, which later crash embedders/parsers.
+    const supportedPaths = (
+      await Promise.all(
+        candidatePaths.map(async (filePath) => {
+          try {
+            const s = await stat(filePath)
+            return s.isFile() ? filePath : undefined
+          } catch {
+            return undefined
+          }
+        }),
+      )
+    ).filter((filePath): filePath is string => filePath !== undefined)
     log.info("discovered candidate files for indexing", {
       workspacePath: scanWorkspace,
       discoveredFiles: allPaths.length,

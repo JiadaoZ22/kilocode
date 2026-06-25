@@ -21,6 +21,14 @@ export interface IEmbedder {
   validateConfiguration(): Promise<{ valid: boolean; error?: string }>
 
   get embedderInfo(): EmbedderInfo
+
+  /**
+   * Maximum number of input texts the embedder can send in a single request.
+   * The scanner uses this to size batches so each embedding call is one request
+   * instead of being internally split into serial sub-requests.
+   * `Infinity` means the embedder is limited only by tokens, not input count.
+   */
+  readonly maxBatchInputs: number
 }
 
 export interface EmbeddingResponse {

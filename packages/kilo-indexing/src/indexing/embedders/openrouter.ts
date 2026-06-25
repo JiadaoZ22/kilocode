@@ -39,6 +39,8 @@ interface OpenRouterEmbeddingResponse {
  * through a single endpoint, automatically handling fallbacks and cost optimization.
  */
 export class OpenRouterEmbedder implements IEmbedder {
+  // OpenRouter supports batched inputs through its OpenAI-compatible endpoint.
+  readonly maxBatchInputs = Infinity
   private embeddingsClient: OpenAI
   private readonly defaultModelId: string
   private readonly apiKey: string

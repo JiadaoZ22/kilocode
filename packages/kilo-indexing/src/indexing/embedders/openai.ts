@@ -19,6 +19,8 @@ const log = Log.create({ service: "embedder-openai" })
  * OpenAI implementation of the embedder interface with batching and rate limiting
  */
 export class OpenAiEmbedder implements IEmbedder {
+  // OpenAI supports up to 2048 inputs per embedding request.
+  readonly maxBatchInputs = 2048
   private embeddingsClient: OpenAI
   private readonly defaultModelId: string
 

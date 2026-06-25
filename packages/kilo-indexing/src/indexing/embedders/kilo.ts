@@ -34,7 +34,7 @@ export class KiloEmbedder implements IEmbedder {
       input.apiKey,
       this.model,
       MAX_ITEM_TOKENS,
-      { headers, dimensions: input.dimensions },
+      { headers, dimensions: input.dimensions, maxBatchInputs: Infinity },
     )
   }
 
@@ -64,6 +64,10 @@ export class KiloEmbedder implements IEmbedder {
       })
       throw err
     }
+  }
+
+  get maxBatchInputs(): number {
+    return this.embedder.maxBatchInputs
   }
 
   get embedderInfo(): EmbedderInfo {

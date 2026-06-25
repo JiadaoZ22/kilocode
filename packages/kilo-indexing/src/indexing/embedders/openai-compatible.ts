@@ -33,6 +33,7 @@ interface OpenAIEmbeddingResponse {
 type OpenAICompatibleOptions = {
   headers?: Record<string, string>
   dimensions?: number
+  maxBatchInputs?: number
 }
 
 /**
@@ -41,6 +42,7 @@ type OpenAICompatibleOptions = {
  */
 
 export class OpenAICompatibleEmbedder implements IEmbedder {
+  readonly maxBatchInputs: number
   private embeddingsClient: OpenAI
   private readonly defaultModelId: string
   private readonly baseUrl: string
@@ -102,6 +104,9 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
     this.maxItemTokens = maxItemTokens || MAX_ITEM_TOKENS
     this.headers = options.headers ?? {}
     this.dimensions = options.dimensions
+    // Default to the Ark/Doubao-compatible limit. Wrappers for providers that
+    // support larger batches can override this via options.maxBatchInputs.
+    this.maxBatchInputs = options.maxBatchInputs ?? OPENAI_COMPATIBLE_MAX_BATCH_INPUTS
   }
 
   /**
@@ -160,7 +165,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
         // Some OpenAI-compatible providers cap the number of inputs per request
         // (e.g. Volcano Ark / Doubao allows a maximum of 10). Stop adding to this
         // batch once we reach the provider limit.
-        if (currentBatch.length >= OPENAI_COMPATIBLE_MAX_BATCH_INPUTS) {
+        if (currentBatch.length >= this.maxBatchInputs) {
           break
         }
 

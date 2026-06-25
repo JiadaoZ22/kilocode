@@ -316,7 +316,7 @@ export namespace KiloCompactionChunks {
       const next: Output[] = yield* Effect.forEach(
         groups,
         (group) => reduce({ ...input, summaries: group, depth: input.depth + 1 }),
-        { concurrency: 1 },
+        { concurrency: Math.min(CONCURRENCY, groups.length) },
       )
       if (next.some((item) => item.result !== "continue" || !item.output)) return result
       return yield* reduce({ ...input, summaries: next.map((item) => item.output!), depth: input.depth + 2 })
@@ -341,10 +341,15 @@ export namespace KiloCompactionChunks {
       })
 
       const partial: Output[] = []
-      for (let i = 0; i < chunks.length; i++) {
-        const result = yield* summarize({ ...input, chunk: chunks[i]!, total: chunks.length })
-        partial.push(result)
-        if (result.result !== "continue" || !result.output) {
+      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+        const batch = chunks.slice(i, i + CONCURRENCY)
+        const results = yield* Effect.forEach(
+          batch,
+          (chunk) => summarize({ ...input, chunk, total: chunks.length }),
+          { concurrency: batch.length },
+        )
+        partial.push(...results)
+        if (results.some((result) => result.result !== "continue" || !result.output)) {
           // Leave the progress text in place so the user sees where it stopped.
           return "compact" as const
         }
@@ -353,7 +358,7 @@ export namespace KiloCompactionChunks {
           messageID: input.target.id,
           sessionID: input.sessionID,
           type: "text",
-          text: `Compacting session summary... (${i + 1}/${chunks.length} chunks summarized)`,
+          text: `Compacting session summary... (${Math.min(i + CONCURRENCY, chunks.length)}/${chunks.length} chunks summarized)`,
         })
       }
 
