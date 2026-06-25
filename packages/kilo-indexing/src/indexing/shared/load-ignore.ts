@@ -55,3 +55,28 @@ export async function loadIgnore(root: string): Promise<Ignore> {
 
   return ig
 }
+
+/**
+ * Load raw ignore patterns from the same sources as `loadIgnore`.
+ * These gitignore-style strings can be passed to tools like `glob`
+ * so directory pruning happens during traversal instead of after.
+ */
+export async function loadIgnorePatterns(root: string): Promise<string[]> {
+  const patterns: string[] = []
+
+  const globalTxt = await readGlobal()
+  if (globalTxt?.trim()) {
+    patterns.push(...globalTxt.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")))
+  }
+
+  for (const name of files) {
+    const txt = await read(root, name)
+    if (!txt?.trim()) {
+      continue
+    }
+    patterns.push(...txt.split(/\r?\n/).filter((line) => line.trim() && !line.trim().startsWith("#")))
+    patterns.push(name)
+  }
+
+  return patterns
+}

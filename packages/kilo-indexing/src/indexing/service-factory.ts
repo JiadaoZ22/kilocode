@@ -211,6 +211,7 @@ export class CodeIndexServiceFactory {
     vectorStore: IVectorStore,
     parser: ICodeParser,
     ignoreInstance: Ignore,
+    ignorePatterns: string[] = [],
   ): DirectoryScanner {
     const config = this.configManager.getConfig()
     const meta = this.getTelemetryMeta()
@@ -220,6 +221,7 @@ export class CodeIndexServiceFactory {
       parser,
       this.cacheManager,
       ignoreInstance,
+      ignorePatterns,
       config.embeddingBatchSize,
       config.scannerMaxBatchRetries,
       this.onTelemetry,
@@ -251,6 +253,7 @@ export class CodeIndexServiceFactory {
   public createServices(
     cacheManager: CacheManager,
     ignoreInstance: Ignore,
+    ignorePatterns: string[] = [],
   ): {
     embedder: IEmbedder
     vectorStore: IVectorStore
@@ -274,7 +277,7 @@ export class CodeIndexServiceFactory {
     const embedder = this.createEmbedder()
     const vectorStore = this.createVectorStore()
     const parser = codeParser
-    const scanner = this.createDirectoryScanner(embedder, vectorStore, parser, ignoreInstance)
+    const scanner = this.createDirectoryScanner(embedder, vectorStore, parser, ignoreInstance, ignorePatterns)
     const fileWatcher = this.createFileWatcher(embedder, vectorStore, cacheManager, ignoreInstance)
 
     log.info("indexing services created", {

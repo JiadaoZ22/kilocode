@@ -10,7 +10,7 @@ import { CodeIndexOrchestrator } from "./orchestrator"
 import { CacheManager } from "./cache-manager"
 import { Emitter } from "./runtime"
 import { Log } from "../util/log"
-import { loadIgnore } from "./shared/load-ignore"
+import { loadIgnore, loadIgnorePatterns } from "./shared/load-ignore"
 import { sanitizeErrorMessage } from "./shared/validation-helpers"
 
 const log = Log.create({ service: "indexing-manager" })
@@ -455,11 +455,13 @@ export class CodeIndexManager {
     )
 
     const ignoreInstance = await loadIgnore(this.workspacePath)
+    const ignorePatterns = await loadIgnorePatterns(this.workspacePath)
 
     const config = this._configManager!.getConfig()
     const { embedder, vectorStore, scanner, fileWatcher } = this._serviceFactory.createServices(
       this._cacheManager!,
       ignoreInstance,
+      ignorePatterns,
     )
     log.info("created indexing services", {
       workspacePath: this.workspacePath,

@@ -42,6 +42,7 @@ export class DirectoryScanner implements IDirectoryScanner {
     private readonly codeParser: ICodeParser,
     private readonly cacheManager: CacheManager,
     private readonly ignoreInstance: Ignore,
+    private readonly ignorePatterns: string[] = [],
     batchSegmentThreshold?: number,
     maxBatchRetries?: number,
     private readonly onTelemetry?: IndexingTelemetryReporter,
@@ -144,13 +145,16 @@ export class DirectoryScanner implements IDirectoryScanner {
     const scanWorkspace = directoryPath
     log.info("starting directory scan", { workspacePath: scanWorkspace })
 
-    // Get all files recursively, filtering out ignored directories via glob
+    // Get all files recursively, filtering out ignored directories via glob.
+    // Use both the hardcoded patterns and the workspace/global ignore patterns
+    // (from .gitignore, .kilocodeignore, ~/.kilocode/.kiloindexignore) so data
+    // directories are pruned during traversal instead of enumerated.
     const allPaths = await glob("**/*", {
       cwd: directoryPath,
       absolute: true,
       nodir: true,
       dot: false,
-      ignore: FileIgnore.PATTERNS,
+      ignore: [...FileIgnore.PATTERNS, ...this.ignorePatterns],
       maxDepth: Infinity,
     })
 
