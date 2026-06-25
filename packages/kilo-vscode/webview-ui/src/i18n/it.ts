@@ -92,17 +92,8 @@ export const dict = {
   "palette.group.files": "File",
   "dialog.provider.search.placeholder": "Cerca provider",
   "dialog.provider.empty": "Nessun provider trovato",
-  "dialog.provider.group.popular": "Popolari",
   "dialog.provider.group.other": "Altro",
   "dialog.provider.tag.recommended": "Consigliato",
-  "dialog.provider.opencode.note": "Modelli curati, inclusi Claude, GPT, Gemini e altri",
-  "dialog.provider.anthropic.note": "Accesso diretto ai modelli Claude, inclusi Pro e Max",
-  "dialog.provider.copilot.note": "Modelli AI per assistenza al coding tramite GitHub Copilot",
-  "dialog.provider.openai.note": "Modelli GPT per attività AI generali rapide e capaci",
-  "dialog.provider.google.note": "Modelli Gemini per risposte rapide e strutturate",
-  "dialog.provider.deepseek.note": "Modelli DeepSeek per ragionamento e attività di coding",
-  "dialog.provider.openrouter.note": "Accesso a tutti i modelli supportati da un solo provider",
-  "dialog.provider.vercel.note": "Accesso unificato ai modelli AI con routing intelligente",
   "dialog.model.select.title": "Seleziona modello",
   "dialog.model.search.placeholder": "Cerca modelli",
   "dialog.model.empty": "Nessun risultato modello",
@@ -448,6 +439,8 @@ export const dict = {
   "notification.permission.titleSubagent": "Autorizzazione richiesta (sub-agent)",
   "notification.permission.description": "{{sessionTitle}} in {{projectName}} richiede autorizzazione",
   "ui.permission.manageAutoApprove": "Gestisci regole approvazione automatica",
+  "ui.permission.doomLoop.prompt": "Rilevato un potenziale ciclo nello strumento {{tool}}. Continuare l'esecuzione?",
+  "ui.permission.doomLoop.rule": "Continua le chiamate a {{tool}}",
   "ui.permission.rule.addToAllowed": "Aggiungi alla lista consentiti",
   "ui.permission.rule.removeFromAllowed": "Rimuovi dalla lista consentiti",
   "ui.permission.rule.addToDenied": "Aggiungi alla lista negati",
@@ -696,9 +689,9 @@ export const dict = {
   "settings.providers.tag.other": "Altro",
   "settings.providers.connected.environmentDescription": "Connesso dalle variabili d'ambiente",
   "settings.providers.action.signInChatGPT": "Accedi con ChatGPT",
-  "settings.providers.custom.description": "Aggiungi un provider compatibile con OpenAI tramite URL base.",
+  "settings.providers.custom.description": "Aggiungi un provider personalizzato tramite URL base.",
   "provider.custom.title": "Provider personalizzato",
-  "provider.custom.description.prefix": "Configura un provider compatibile con OpenAI. Vedi la ",
+  "provider.custom.description.prefix": "Configura un provider personalizzato. Vedi la ",
   "provider.custom.description.link": "documentazione di configurazione provider",
   "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID provider",
@@ -706,6 +699,7 @@ export const dict = {
   "provider.custom.field.providerID.description": "Lettere minuscole, numeri, trattini o underscore",
   "provider.custom.field.name.label": "Nome visualizzato",
   "provider.custom.field.name.placeholder": "Il mio provider AI",
+  "provider.custom.field.package.label": "Provider API",
   "provider.custom.field.baseURL.label": "URL base",
   "provider.custom.field.baseURL.placeholder": "https://api.mio-provider.com/v1",
   "provider.custom.field.apiKey.label": "API key",
@@ -731,6 +725,11 @@ export const dict = {
   "provider.custom.models.variants.thinking.placeholder": "thinking",
   "provider.custom.models.variants.thinking.enabled": "enabled",
   "provider.custom.models.variants.thinking.disabled": "disabled",
+  "provider.custom.models.variants.thinking.adaptive": "adaptive",
+  "provider.custom.models.variants.splitReasoning.label": "Split reasoning (required for e.g. MiniMax)",
+  "provider.custom.models.variants.splitReasoning.placeholder": "reasoning_split",
+  "provider.custom.models.variants.splitReasoning.true": "true",
+  "provider.custom.models.variants.splitReasoning.false": "false",
   "provider.custom.models.variants.chatTemplateArgs.label":
     "Enable thinking via chat template args (e.g. Hugging Face)",
   "provider.custom.models.variants.chatTemplateArgs.placeholder": "chat_template_args",
@@ -744,6 +743,13 @@ export const dict = {
   "provider.custom.models.variants.reasoningEffort.medium": "medium",
   "provider.custom.models.variants.reasoningEffort.high": "high",
   "provider.custom.models.variants.reasoningEffort.xhigh": "xhigh",
+  "provider.custom.models.variants.outputEffort.label": "Output effort (e.g. Anthropic)",
+  "provider.custom.models.variants.outputEffort.placeholder": "effort",
+  "provider.custom.models.variants.outputEffort.low": "low",
+  "provider.custom.models.variants.outputEffort.medium": "medium",
+  "provider.custom.models.variants.outputEffort.high": "high",
+  "provider.custom.models.variants.outputEffort.xhigh": "xhigh",
+  "provider.custom.models.variants.outputEffort.max": "max",
   "provider.custom.models.remove": "Rimuovi modello",
   "provider.custom.models.add": "Aggiungi modello",
   "provider.custom.models.fetch": "Recupera modelli",
@@ -866,6 +872,32 @@ export const dict = {
   "feedback.dialog.github": "Segnala un problema su GitHub",
   "feedback.dialog.discord": "Entra nella community Discord",
   "feedback.dialog.support": "Supporto clienti",
+  "workStyle.onboarding.welcome": "Ti diamo il benvenuto in Kilo",
+  "workStyle.onboarding.title": "Scegli come vuoi lavorare",
+  "workStyle.onboarding.description":
+    "Imposta i valori iniziali per autorizzazioni, blocchi di ragionamento, output del terminale e timeline del contesto. Viene applicato una sola volta e ignora le impostazioni già personalizzate.",
+  "workStyle.onboarding.settingsNote": "Puoi modificare queste opzioni in qualsiasi momento in",
+  "workStyle.onboarding.settings": "Impostazioni.",
+  "workStyle.onboarding.skip": "Ignora per ora",
+  "workStyle.toast.saved.title": "Modalità salvata correttamente",
+  "workStyle.toast.saved.description": "Aggiorna le tue preferenze in qualsiasi momento nelle Impostazioni.",
+  "workStyle.toast.saved.action": "Vai alle Impostazioni",
+  "workStyle.choice.permissions": "Autorizzazioni",
+  "workStyle.choice.bash": "Bash",
+  "workStyle.choice.visibility": "Visibilità",
+  "workStyle.choice.human-in-the-loop.eyebrow": "Supervisione umana",
+  "workStyle.choice.human-in-the-loop.title": "Prima la revisione",
+  "workStyle.choice.human-in-the-loop.description": "Kilo si mette in pausa e ti mostra il suo piano mentre lavora.",
+  "workStyle.choice.human-in-the-loop.permissions": "Chiede conferma prima di modificare file o eseguire comandi.",
+  "workStyle.choice.human-in-the-loop.bash": "Chiede l'autorizzazione per ogni comando del terminale.",
+  "workStyle.choice.human-in-the-loop.visibility":
+    "Mostra tutti i dettagli della conversazione, incluso il ragionamento.",
+  "workStyle.choice.autonomous.eyebrow": "Meno interruzioni",
+  "workStyle.choice.autonomous.title": "Autonomia elevata",
+  "workStyle.choice.autonomous.description": "Meno interruzioni e un'interfaccia semplificata.",
+  "workStyle.choice.autonomous.permissions": "Modifica file ed esegue comandi nel workspace senza chiedere conferma.",
+  "workStyle.choice.autonomous.bash": "Può eseguire comandi nel terminale del workspace senza approvazione.",
+  "workStyle.choice.autonomous.visibility": "I dettagli restano compressi finché non li espandi.",
   "session.cloud.import.title": "Importa sessione",
   "session.cloud.import.placeholder": "ID sessione, URL o comando kilo import",
   "session.cloud.import.button": "Importa",
@@ -938,6 +970,9 @@ export const dict = {
   "settings.indexing.status.title": "Stato",
   "settings.indexing.enable.title": "Abilita indicizzazione",
   "settings.indexing.enable.description": "Attiva o disattiva l'indicizzazione semantica del codebase.",
+  "settings.indexing.showButton.title": "Mostra il pulsante quando l'indicizzazione è disattivata",
+  "settings.indexing.showButton.description":
+    "Mostra il pulsante di indicizzazione sotto il prompt quando l'indicizzazione è disattivata. Se il pulsante è nascosto, apri Impostazioni > Indicizzazione per attivare l'indicizzazione.",
   "settings.indexing.provider.title": "Provider embedding",
   "settings.indexing.provider.description": "Scegli il provider usato per generare embedding per la ricerca semantica.",
   "settings.indexing.model.title": "Modello embedding",
@@ -1093,6 +1128,10 @@ export const dict = {
   "settings.notifications.errors.title": "Errori",
   "settings.notifications.errors.description": "Mostra una notifica per gli errori",
   "settings.notifications.sounds": "Suoni",
+  "settings.notifications.enable.title": "Abilita le notifiche sonore",
+  "settings.notifications.enable.description":
+    "Riproduci suoni quando le sessioni si concludono, si verifica un errore o è richiesto il tuo intervento",
+  "settings.notifications.testSound": "Prova",
   "settings.notifications.agentSound.title": "Suono completamento agente",
   "settings.notifications.agentSound.description": "Suono da riprodurre quando l'agente completa un task",
   "settings.notifications.permSound.title": "Suono richiesta autorizzazione",
@@ -1100,6 +1139,9 @@ export const dict = {
   "settings.notifications.errorSound.title": "Suono errore",
   "settings.notifications.errorSound.description": "Suono da riprodurre per gli errori",
   "settings.notifications.sound.default": "Predefinito",
+  "settings.notifications.sound.system": "Sistema",
+  "settings.notifications.sound.description":
+    "L'opzione predefinita usa suoni diversi per completamento, intervento ed errori. Le altre opzioni usano un unico suono per tutti gli eventi.",
   "settings.notifications.sound.none": "Nessuno",
   "settings.experimental.share.title": "Modalità condivisione",
   "settings.experimental.share.description": "Come si comporta la condivisione sessione",
@@ -1110,8 +1152,6 @@ export const dict = {
   "settings.experimental.formatter.description": "Abilita il formatter automatico del codice",
   "settings.experimental.lsp.title": "LSP",
   "settings.experimental.lsp.description": "Abilita integrazione language server protocol",
-  "settings.experimental.pasteSummary.title": "Disabilita riassunto incolla",
-  "settings.experimental.pasteSummary.description": "Non riassumere contenuti incollati molto lunghi",
   "settings.experimental.batch.title": "Tool batch",
   "settings.experimental.batch.description": "Abilita batching di più chiamate tool",
   "settings.experimental.semanticIndexing.title": "Indicizzazione semantica",
@@ -1121,6 +1161,10 @@ export const dict = {
   "settings.experimental.codebaseSearch.description": "Abilita ricerca in linguaggio naturale con AI nel codebase",
   "settings.experimental.continueOnDeny.title": "Continua dopo rifiuto",
   "settings.experimental.continueOnDeny.description": "Continua il loop agente quando un'autorizzazione viene negata",
+  "settings.sandboxing.title": "Sandbox",
+  "settings.sandboxing.network.title": "Limita l'accesso alla rete",
+  "settings.sandboxing.network.description":
+    "Blocca l'accesso in uscita alla rete per i comandi avviati dal modello e gli strumenti HTTP. I server MCP locali e gli hook dei plugin operano al di fuori di questa restrizione. Il traffico verso i provider e per l'inferenza dei modelli rimane disponibile.",
   "settings.experimental.mcpTimeout.title": "Timeout MCP (ms)",
   "settings.experimental.mcpTimeout.description": "Timeout per richieste server MCP in millisecondi",
   "settings.experimental.remote.title": "Controllo remoto",
@@ -1160,6 +1204,15 @@ export const dict = {
   "settings.agentBehaviour.noSkillsFound":
     "Nessuna skill rilevata. Aggiungi percorsi cartella o URL di skill qui sotto per renderle disponibili.",
   "settings.agentBehaviour.availableModes": "Modalità personalizzate disponibili",
+  "prompt.action.sandbox.enable": "Abilita sandbox",
+  "prompt.action.sandbox.disable": "Disabilita sandbox",
+  "prompt.action.sandbox.enabled":
+    "Sandbox abilitata. I comandi shell dell'agente sono limitati alle directory del progetto e di Kilo.",
+  "prompt.action.sandbox.disabled":
+    "Sandbox disabilitata. Fai clic per limitare le scritture dei comandi shell dell'agente alle directory del progetto e di Kilo.",
+  "settings.experimental.sandbox.title": "Sandbox",
+  "settings.experimental.sandbox.description":
+    "Esegui i comandi shell dell'agente all'interno di un sandbox a livello di sistema operativo che limita le scritture alle directory di stato del progetto e di Kilo",
 
   "settings.agentBehaviour.skillPaths": "Percorsi cartelle skill",
   "settings.agentBehaviour.skillUrls": "URL skill",
@@ -1281,7 +1334,7 @@ export const dict = {
   "settings.autoApprove.tool.todoreadwrite":
     "Gestisci lista task. Consente lettura e aggiornamento della lista task interna.",
   "settings.autoApprove.tool.webfetch": "Recupera URL. Consente di recuperare contenuti da un URL specifico.",
-  "settings.autoApprove.tool.websearchcodesearch": "Cerca web o codice. Consente ricerche web o di codice esterne.",
+  "settings.autoApprove.tool.websearch": "Cerca sul web. Consente ricerche web esterne.",
   "settings.autoApprove.tool.doom_loop":
     "Previeni azioni identiche ripetute. Si attiva quando la stessa chiamata tool si ripete con input identico.",
   "settings.checkpoints.enable.title": "Abilita snapshot",
@@ -1304,10 +1357,6 @@ export const dict = {
     "es. Genera messaggi di commit in spagnolo seguendo il formato conventional commits. Restituisci SOLO il messaggio di commit.",
   "settings.display.username.title": "Nome utente",
   "settings.display.username.description": "Nome utente personalizzato mostrato nelle conversazioni",
-  "settings.display.layout.title": "Layout",
-  "settings.display.layout.description": "Modalità layout per l'interfaccia chat",
-  "settings.display.layout.auto": "Auto",
-  "settings.display.layout.stretch": "Esteso",
   "settings.display.fontSize.title": "Dimensione font",
   "settings.display.fontSize.description":
     "Regola la dimensione del font della webview Kilo indipendentemente da VS Code.",
@@ -1318,6 +1367,11 @@ export const dict = {
   "settings.display.terminalCommand.description": "Scegli se i blocchi comando terminale iniziano espansi o compressi.",
   "settings.display.terminalCommand.expanded": "Espansi",
   "settings.display.terminalCommand.collapsed": "Compressi",
+  "settings.display.codeEdit.title": "Blocchi di modifica del codice",
+  "settings.display.codeEdit.description":
+    "Scegli se i blocchi delle modifiche al codice e delle differenze iniziano espansi o compressi.",
+  "settings.display.codeEdit.expanded": "Espansi",
+  "settings.display.codeEdit.collapsed": "Compressi",
   "settings.providers.defaultModel.title": "Modello predefinito",
   "settings.providers.defaultModel.description": "Modello principale per le conversazioni",
   "settings.providers.smallModel.title": "Modello leggero",
@@ -1333,7 +1387,7 @@ export const dict = {
   "settings.providers.enabled.description":
     "Se impostato, saranno disponibili solo questi provider (allowlist esclusiva)",
   "settings.providers.notSet": "Non impostato (usa default server)",
-  "settings.providers.custom.note": "Aggiungi un provider compatibile con OpenAI tramite URL base.",
+  "settings.providers.custom.note": "Aggiungi un provider personalizzato tramite URL base.",
   "settings.providers.search.placeholder": "Cerca provider",
   "settings.providers.select.placeholder": "Seleziona provider...",
   "dialog.model.notSet": "Non impostato",
@@ -1345,6 +1399,9 @@ export const dict = {
   "settings.aboutKiloCode.legacyMigration.title": "Migrazione legacy",
   "settings.aboutKiloCode.legacyMigration.description":
     "Migra le impostazioni da una precedente installazione di Kilo Code, incluse API key dei provider e modello predefinito.",
+  "settings.aboutKiloCode.rooImport.description":
+    "Importa la cronologia delle conversazioni da una installazione di Roo Code.",
+  "settings.aboutKiloCode.rooImport.button": "Importa sessioni da Roo Code",
   "migration.whatsNew.title": "Novità in Kilo Code",
   "migration.whatsNew.subtitle": "Abbiamo ricostruito l'estensione su fondamenta più veloci ed efficienti.",
   "migration.whatsNew.features.performance.title": "Prestazioni agente più rapide",
@@ -1485,11 +1542,10 @@ export const dict = {
   "settings.experimental.speechToText.title": "Da voce a testo",
   "settings.experimental.speechToText.description":
     "Abilita input vocale nei campi prompt usando il tuo account Kilo tramite Kilo Gateway.",
-  "settings.experimental.speechToText.disabledDescription":
+  "settings.models.speechToText.disabledDescription":
     "Abilita e accedi al provider Kilo per usare Da voce a testo. Da voce a testo è attualmente supportato solo tramite Kilo Gateway.",
-  "settings.experimental.speechToTextModel.title": "Modello Da voce a testo",
-  "settings.experimental.speechToTextModel.description":
-    "Scegli il modello di trascrizione Kilo Gateway per l'input vocale.",
+  "settings.models.speechToTextModel.title": "Modello Da voce a testo",
+  "settings.models.speechToTextModel.description": "Scegli il modello di trascrizione Kilo Gateway per l'input vocale.",
 
   // Compaction limit
   "settings.context.compactionLimit.title": "Limite compattazione automatica",
@@ -1500,6 +1556,9 @@ export const dict = {
   "settings.providers.subagentModel.title": "Modello sub-agent",
   "settings.providers.subagentModel.description":
     "Modello e sforzo di ragionamento predefiniti per i sub-agent del tool task. Lascia non impostato per ereditare il modello dell'agente chiamante.",
+  "settings.models.hidePromptTraining.title": "Nascondi i modelli che usano i prompt per l'addestramento",
+  "settings.models.hidePromptTraining.description":
+    "Nascondi i modelli Kilo Gateway i cui provider potrebbero usare i tuoi prompt per l'addestramento.",
 
   // Autocomplete hint
   "settings.autocomplete.modelsHint":

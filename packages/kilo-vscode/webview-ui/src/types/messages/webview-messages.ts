@@ -5,12 +5,14 @@ import type { PermissionFileDiff } from "./permissions"
 import type { ModelSelection, ProviderConfig } from "./providers"
 import type { Config } from "./config"
 import type { ModelAllocation, ReviewComment } from "./agent-manager"
+import type { ReviewMessageData } from "../../../../src/shared/review-comments"
+import type { WorkStyle, WorkStyleState } from "../../../../src/shared/work-style-presets"
 import type {
   ClearLegacyDataMessage,
   FinalizeLegacyMigrationMessage,
-  RequestLegacyMigrationDataMessage,
+  RequestMigrationDataMessage,
   SkipLegacyMigrationMessage,
-  StartLegacyMigrationMessage,
+  StartMigrationMessage,
 } from "./migration"
 
 // ============================================
@@ -28,6 +30,7 @@ export interface SendMessageRequest {
   agent?: string
   variant?: string
   files?: FileAttachment[]
+  review?: ReviewMessageData
   agentManagerContext?: string
   contextDirectory?: string
 }
@@ -104,6 +107,7 @@ export interface ImportAndSendMessage {
   agent?: string
   variant?: string
   files?: FileAttachment[]
+  review?: ReviewMessageData
   command?: string
   commandArgs?: string
 }
@@ -386,6 +390,20 @@ export interface RequestTimelineSettingMessage {
   type: "requestTimelineSetting"
 }
 
+export interface RequestWorkStyleMessage {
+  type: "requestWorkStyle"
+}
+
+export interface SetWorkStyleMessage {
+  type: "setWorkStyle"
+  style: WorkStyleState
+}
+
+export interface ApplyWorkStyleMessage {
+  type: "applyWorkStyle"
+  style: WorkStyle
+}
+
 export interface StreamSessionVisibleMessage {
   type: "streamSessionVisible"
   sessionID: string
@@ -412,6 +430,10 @@ export interface RequestIndexingStatusMessage {
   type: "requestIndexingStatus"
 }
 
+export interface RequestIndexingSettingsMessage {
+  type: "requestIndexingSettings"
+}
+
 export interface RequestKiloEmbeddingModelsMessage {
   type: "requestKiloEmbeddingModels"
 }
@@ -425,12 +447,19 @@ export interface UpdateConfigMessage {
   type: "updateConfig"
   /** Global config patch written to ~/.config/kilo/kilo.json. */
   config: Partial<Config>
-  /** Project config patch written to the workspace's .kilo/kilo.json or existing project config. */
+  globalUnset?: string[][]
+  /** Project config patch written to the workspace's .kilo/kilo.jsonc or existing project config. */
   projectConfig?: Partial<Config>
+  projectUnset?: string[][]
 }
 
 export interface RequestNotificationSettingsMessage {
   type: "requestNotificationSettings"
+}
+
+export interface TestNotificationMessage {
+  type: "testNotification"
+  sound: string
 }
 
 export interface ResetAllSettingsRequest {
@@ -895,6 +924,20 @@ export interface ToggleAutoApproveMessage {
   type: "toggleAutoApprove"
 }
 
+export interface RequestSandboxStatusMessage {
+  type: "requestSandboxStatus"
+  sessionID: string
+}
+
+export interface ToggleSandboxMessage {
+  type: "toggleSandbox"
+  sessionID?: string
+  draftID?: string
+  requestID: string
+  agentManagerContext?: string
+  contextDirectory?: string
+}
+
 export interface ToggleRemoteMessage {
   type: "toggleRemote"
 }
@@ -951,6 +994,13 @@ export interface FetchCustomProviderModelsMessage {
   requestId: string
   baseURL: string
   apiKey?: string
+  /**
+   * When editing an existing provider and the key field is untouched, the
+   * webview has no key to send (keys are stripped before they reach it).
+   * It sends the providerID instead so the extension can authenticate the
+   * fetch with the stored key — which never crosses into the webview.
+   */
+  providerID?: string
   headers?: Record<string, string>
 }
 
@@ -1123,16 +1173,21 @@ export type WebviewMessage =
   | ChatCompletionAcceptedMessage
   | UpdateSettingRequest
   | RequestTimelineSettingMessage
+  | RequestWorkStyleMessage
+  | SetWorkStyleMessage
+  | ApplyWorkStyleMessage
   | StreamSessionVisibleMessage
   | RequestBrowserSettingsMessage
   | RequestClaudeCompatSettingMessage
   | RequestConfigMessage
   | RequestGlobalConfigMessage
   | RequestIndexingStatusMessage
+  | RequestIndexingSettingsMessage
   | RequestKiloEmbeddingModelsMessage
   | UpdateConfigMessage
   | OpenSettingsTabRequest
   | RequestNotificationSettingsMessage
+  | TestNotificationMessage
   | ResetAllSettingsRequest
   | SettingsTabChangedMessage
   | SyncSessionRequest
@@ -1188,8 +1243,8 @@ export type WebviewMessage =
   | RefreshPRMessage
   | OpenPRMessage
   // legacy-migration start
-  | RequestLegacyMigrationDataMessage
-  | StartLegacyMigrationMessage
+  | RequestMigrationDataMessage
+  | StartMigrationMessage
   | SkipLegacyMigrationMessage
   | ClearLegacyDataMessage
   | FinalizeLegacyMigrationMessage
@@ -1216,6 +1271,8 @@ export type WebviewMessage =
   | AgentManagerOpenSessionsMessage
   | RequestAutoApproveStateMessage
   | ToggleAutoApproveMessage
+  | RequestSandboxStatusMessage
+  | ToggleSandboxMessage
   | FetchMarketplaceDataMessage
   | FilterMarketplaceItemsMessage
   | InstallMarketplaceItemMessage

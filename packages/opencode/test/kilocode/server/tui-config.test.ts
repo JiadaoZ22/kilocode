@@ -74,15 +74,63 @@ describe("TUI config routes", () => {
         "content-type": "application/json",
         "x-kilo-directory": tmp.path,
       },
-      body: JSON.stringify({ theme: "nord" }),
+      body: JSON.stringify({ theme: "nord", title_icon: "emojis" }),
     })
 
     expect(response.status).toBe(200)
-    const body = (await response.json()) as { theme?: string }
+    const body = (await response.json()) as { theme?: string; title_icon?: string }
     expect(body.theme).toBe("nord")
+    expect(body.title_icon).toBe("emojis")
 
     const saved = await Bun.file(path.join(tmp.path, ".kilo", "tui.json")).json()
-    expect(saved).toEqual({ theme: "nord" })
+    expect(saved).toEqual({ theme: "nord", title_icon: "emojis" })
+  })
+
+  test("patches attention config without dropping advanced notification settings", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const cfg = path.join(dir, ".kilo")
+        await fs.mkdir(cfg, { recursive: true })
+        await Bun.write(
+          path.join(cfg, "tui.json"),
+          JSON.stringify(
+            {
+              attention: {
+                enabled: false,
+                sound_pack: "custom.pack",
+                sounds: { question: "./question.mp3" },
+              },
+            },
+            null,
+            2,
+          ),
+        )
+      },
+    })
+
+    const response = await Server.Default().app.request("/tui/config?scope=project", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-kilo-directory": tmp.path,
+      },
+      body: JSON.stringify({
+        attention: { enabled: true, notifications: false, sound: true, volume: 0.25 },
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const saved = await Bun.file(path.join(tmp.path, ".kilo", "tui.json")).json()
+    expect(saved).toEqual({
+      attention: {
+        enabled: true,
+        notifications: false,
+        sound: true,
+        volume: 0.25,
+        sound_pack: "custom.pack",
+        sounds: { question: "./question.mp3" },
+      },
+    })
   })
 
   test("emits global.config.updated when patching TUI config so open TUIs hot-reload", async () => {

@@ -13,6 +13,7 @@ import ai.kilocode.rpc.dto.ModelSelectionDto
 import ai.kilocode.rpc.dto.PermissionAlwaysRulesDto
 import ai.kilocode.rpc.dto.PermissionReplyDto
 import ai.kilocode.rpc.dto.PermissionRequestDto
+import ai.kilocode.rpc.dto.PartDto
 import ai.kilocode.rpc.dto.PromptDto
 import ai.kilocode.rpc.dto.QuestionReplyDto
 import ai.kilocode.rpc.dto.QuestionRequestDto
@@ -155,6 +156,9 @@ class KiloSessionService internal constructor(
 
     // ------ Chat ops (explicit session ID) ------
 
+    suspend fun enhancePrompt(dir: String, text: String): String =
+        call { enhancePrompt(dir, text) }
+
     /** Send a prompt to a session. */
     suspend fun prompt(id: String, dir: String, dto: PromptDto) {
         val meta = if (LOG.isDebugEnabled) {
@@ -165,6 +169,12 @@ class KiloSessionService internal constructor(
         LOG.info("${ChatLogSummary.sid(id)} $meta")
         call { prompt(id, dir, dto) }
         LOG.info("${ChatLogSummary.sid(id)} kind=prompt ok=true")
+    }
+
+    suspend fun command(id: String, dir: String, command: String, args: String, dto: PromptDto) {
+        LOG.info("${ChatLogSummary.sid(id)} kind=command command=$command parts=${dto.parts.size}")
+        call { command(id, dir, command, args, dto) }
+        LOG.info("${ChatLogSummary.sid(id)} kind=command ok=true")
     }
 
     /** Abort ongoing processing for a session. */
@@ -181,6 +191,9 @@ class KiloSessionService internal constructor(
     suspend fun messages(id: String, dir: String): List<MessageWithPartsDto> =
         call { messages(id, dir) }
             .also { LOG.debug { "${ChatLogSummary.sid(id)} ${ChatLogSummary.history(it)} ${ChatLogSummary.dir(dir)}" } }
+
+    suspend fun attachmentPart(id: String, dir: String, message: String, part: String, key: String?): PartDto? =
+        call { attachmentPart(id, dir, message, part, key) }
 
     /** Subscribe to streaming chat events for a session. */
     fun events(id: String, dir: String): Flow<ChatEventDto> {

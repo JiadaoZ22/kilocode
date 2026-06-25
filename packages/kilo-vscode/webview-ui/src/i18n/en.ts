@@ -101,17 +101,8 @@ export const dict = {
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",
-  "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Other",
   "dialog.provider.tag.recommended": "Recommended",
-  "dialog.provider.opencode.note": "Curated models including Claude, GPT, Gemini and more",
-  "dialog.provider.anthropic.note": "Direct access to Claude models, including Pro and Max",
-  "dialog.provider.deepseek.note": "DeepSeek models for reasoning and coding tasks",
-  "dialog.provider.copilot.note": "Claude models for coding assistance",
-  "dialog.provider.openai.note": "GPT and Codex models with API key or ChatGPT login",
-  "dialog.provider.google.note": "Gemini models for fast, structured responses",
-  "dialog.provider.openrouter.note": "Access all supported models from one provider",
-  "dialog.provider.vercel.note": "Unified access to AI models with smart routing",
 
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
@@ -292,6 +283,12 @@ export const dict = {
   "prompt.action.autoApprove.disable": "Disable auto-approve",
   "prompt.action.autoApprove.enabled": "Auto-approve is enabled. Permission prompts will be approved automatically.",
   "prompt.action.autoApprove.disabled": "Auto-approve is disabled. Click to approve permission prompts automatically.",
+  "prompt.action.sandbox.enable": "Enable sandbox",
+  "prompt.action.sandbox.disable": "Disable sandbox",
+  "prompt.action.sandbox.enabled":
+    "Sandbox is enabled. Agent shell commands are confined to the project and Kilo directories.",
+  "prompt.action.sandbox.disabled":
+    "Sandbox is disabled. Click to confine agent shell command writes to the project and Kilo directories.",
   "prompt.action.resetModel": "Reset model to default",
   "prompt.action.enhanceDescription":
     "The 'Enhance Prompt' button helps improve your prompt by providing additional context, clarification, or rephrasing. Try typing a prompt in here and clicking the button again to see how it works.",
@@ -527,6 +524,8 @@ export const dict = {
   "notification.permission.titleSubagent": "Permission required (subagent)",
   "notification.permission.description": "{{sessionTitle}} in {{projectName}} needs permission",
   "ui.permission.manageAutoApprove": "Manage Auto-Approve Rules",
+  "ui.permission.doomLoop.prompt": "Potential loop detected for the {{tool}} tool. Continue running?",
+  "ui.permission.doomLoop.rule": "Continue {{tool}} calls",
   "ui.permission.rule.addToAllowed": "Add to allowed list",
   "ui.permission.rule.removeFromAllowed": "Remove from allowed list",
   "ui.permission.rule.addToDenied": "Add to denied list",
@@ -799,10 +798,10 @@ export const dict = {
   "settings.providers.tag.other": "Other",
   "settings.providers.connected.environmentDescription": "Connected from your environment variables",
   "settings.providers.action.signInChatGPT": "Sign in with ChatGPT",
-  "settings.providers.custom.description": "Add an OpenAI-compatible provider by base URL.",
+  "settings.providers.custom.description": "Add a custom provider by base URL.",
 
   "provider.custom.title": "Custom provider",
-  "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
+  "provider.custom.description.prefix": "Configure a custom provider. See the ",
   "provider.custom.description.link": "provider config docs",
   "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "Provider ID",
@@ -810,6 +809,7 @@ export const dict = {
   "provider.custom.field.providerID.description": "Lowercase letters, numbers, hyphens, or underscores",
   "provider.custom.field.name.label": "Display name",
   "provider.custom.field.name.placeholder": "My AI Provider",
+  "provider.custom.field.package.label": "Provider API",
   "provider.custom.field.baseURL.label": "Base URL",
   "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
   "provider.custom.field.apiKey.label": "API key",
@@ -835,6 +835,11 @@ export const dict = {
   "provider.custom.models.variants.thinking.placeholder": "thinking",
   "provider.custom.models.variants.thinking.enabled": "enabled",
   "provider.custom.models.variants.thinking.disabled": "disabled",
+  "provider.custom.models.variants.thinking.adaptive": "adaptive",
+  "provider.custom.models.variants.splitReasoning.label": "Split reasoning (required for e.g. MiniMax)",
+  "provider.custom.models.variants.splitReasoning.placeholder": "reasoning_split",
+  "provider.custom.models.variants.splitReasoning.true": "true",
+  "provider.custom.models.variants.splitReasoning.false": "false",
   "provider.custom.models.variants.chatTemplateArgs.label":
     "Enable thinking via chat template args (e.g. Hugging Face)",
   "provider.custom.models.variants.chatTemplateArgs.placeholder": "chat_template_args",
@@ -848,6 +853,13 @@ export const dict = {
   "provider.custom.models.variants.reasoningEffort.medium": "medium",
   "provider.custom.models.variants.reasoningEffort.high": "high",
   "provider.custom.models.variants.reasoningEffort.xhigh": "xhigh",
+  "provider.custom.models.variants.outputEffort.label": "Output effort (e.g. Anthropic)",
+  "provider.custom.models.variants.outputEffort.placeholder": "effort",
+  "provider.custom.models.variants.outputEffort.low": "low",
+  "provider.custom.models.variants.outputEffort.medium": "medium",
+  "provider.custom.models.variants.outputEffort.high": "high",
+  "provider.custom.models.variants.outputEffort.xhigh": "xhigh",
+  "provider.custom.models.variants.outputEffort.max": "max",
   "provider.custom.models.remove": "Remove model",
   "provider.custom.models.add": "Add model",
   "provider.custom.models.fetch": "Fetch models",
@@ -973,6 +985,31 @@ export const dict = {
   "feedback.dialog.github": "Report an issue on GitHub",
   "feedback.dialog.discord": "Join our Discord community",
   "feedback.dialog.support": "Customer Support",
+  "workStyle.onboarding.welcome": "Welcome to Kilo",
+  "workStyle.onboarding.title": "Choose how you want to work",
+  "workStyle.onboarding.description":
+    "This sets the starting defaults for permissions, reasoning blocks, terminal output, and the context timeline. It only applies once and skips settings you already customized.",
+  "workStyle.onboarding.skip": "Skip for now",
+  "workStyle.onboarding.settingsNote": "You can change these options anytime in",
+  "workStyle.onboarding.settings": "Settings.",
+  "workStyle.toast.saved.title": "Mode saved successfully",
+  "workStyle.toast.saved.description": "Update your preferences anytime in Settings.",
+  "workStyle.toast.saved.action": "Go to Settings",
+  "workStyle.choice.permissions": "Permissions",
+  "workStyle.choice.bash": "Bash",
+  "workStyle.choice.visibility": "Visibility",
+  "workStyle.choice.human-in-the-loop.eyebrow": "Human in the Loop",
+  "workStyle.choice.human-in-the-loop.title": "Review first",
+  "workStyle.choice.human-in-the-loop.description": "Kilo pauses and shows you its plan as it works.",
+  "workStyle.choice.human-in-the-loop.permissions": "Asks before editing files or running commands.",
+  "workStyle.choice.human-in-the-loop.bash": "Asks for permission when running all terminal commands.",
+  "workStyle.choice.human-in-the-loop.visibility": "Shows full conversation details, including reasoning.",
+  "workStyle.choice.autonomous.eyebrow": "Fewer interruptions",
+  "workStyle.choice.autonomous.title": "High autonomy",
+  "workStyle.choice.autonomous.description": "Fewer interruptions, streamlined interface.",
+  "workStyle.choice.autonomous.permissions": "Edits files and runs commands in the workspace without asking.",
+  "workStyle.choice.autonomous.bash": "Can run terminal commands in the workspace without approval.",
+  "workStyle.choice.autonomous.visibility": "Details stay collapsed until you expand them.",
   "session.cloud.import.title": "Import session",
   "session.cloud.import.placeholder": "Session ID, URL, or kilo import command",
   "session.cloud.import.button": "Import",
@@ -1050,6 +1087,9 @@ export const dict = {
   "settings.indexing.status.title": "Status",
   "settings.indexing.enable.title": "Enable indexing",
   "settings.indexing.enable.description": "Turn semantic codebase indexing on or off.",
+  "settings.indexing.showButton.title": "Show button when indexing is off",
+  "settings.indexing.showButton.description":
+    "Show the indexing button below the prompt while indexing is off. If hidden, open Settings > Indexing to enable indexing.",
   "settings.indexing.globalEnable.title": "Enable globally",
   "settings.indexing.globalEnable.description": "Enable indexing for every workspace.",
   "settings.indexing.projectEnable.title": "Enable for this project",
@@ -1233,6 +1273,10 @@ export const dict = {
   "settings.notifications.errors.title": "Errors",
   "settings.notifications.errors.description": "Show notification on errors",
   "settings.notifications.sounds": "Sounds",
+  "settings.notifications.enable.title": "Enable Sound Notifications",
+  "settings.notifications.enable.description":
+    "Play sounds when sessions complete, encounter an error, or need your input",
+  "settings.notifications.testSound": "Test",
   "settings.notifications.agentSound.title": "Agent Completion Sound",
   "settings.notifications.agentSound.description": "Sound to play when agent completes",
   "settings.notifications.permSound.title": "Permission Request Sound",
@@ -1240,6 +1284,9 @@ export const dict = {
   "settings.notifications.errorSound.title": "Error Sound",
   "settings.notifications.errorSound.description": "Sound to play on errors",
   "settings.notifications.sound.default": "Default",
+  "settings.notifications.sound.system": "System",
+  "settings.notifications.sound.description":
+    "Default uses different sounds for completion, input, and errors. Other choices use one sound for every event.",
   "settings.notifications.sound.none": "None",
 
   "settings.experimental.share.title": "Share Mode",
@@ -1251,8 +1298,6 @@ export const dict = {
   "settings.experimental.formatter.description": "Enable the automatic code formatter",
   "settings.experimental.lsp.title": "LSP",
   "settings.experimental.lsp.description": "Enable language server protocol integration",
-  "settings.experimental.pasteSummary.title": "Disable Paste Summary",
-  "settings.experimental.pasteSummary.description": "Don't summarize large pasted content",
   "settings.experimental.batch.title": "Batch Tool",
   "settings.experimental.batch.description": "Enable batching of multiple tool calls",
   "settings.experimental.codebaseSearch.title": "Codebase Search",
@@ -1260,12 +1305,19 @@ export const dict = {
   "settings.experimental.speechToText.title": "Speech to Text",
   "settings.experimental.speechToText.description":
     "Enable voice input in prompt fields using your Kilo account through Kilo Gateway.",
-  "settings.experimental.speechToText.disabledDescription":
+  "settings.models.speechToText.disabledDescription":
     "Enable and sign in to the Kilo provider to use Speech to Text. Speech to Text is currently only supported through Kilo Gateway.",
-  "settings.experimental.speechToTextModel.title": "Speech to Text Model",
-  "settings.experimental.speechToTextModel.description": "Choose the Kilo Gateway transcription model for voice input.",
+  "settings.models.speechToTextModel.title": "Speech to Text Model",
+  "settings.models.speechToTextModel.description": "Choose the Kilo Gateway transcription model for voice input.",
   "settings.experimental.continueOnDeny.title": "Continue on Deny",
   "settings.experimental.continueOnDeny.description": "Continue the agent loop when a permission is denied",
+  "settings.experimental.sandbox.title": "Sandbox",
+  "settings.experimental.sandbox.description":
+    "Run agent shell commands inside an OS-level sandbox that restricts writes to the project and Kilo state directories",
+  "settings.sandboxing.title": "Sandboxing",
+  "settings.sandboxing.network.title": "Restrict Network Access",
+  "settings.sandboxing.network.description":
+    "Block outbound network access from model-originated commands and HTTP tools. Local MCP servers and plugin hooks run outside this restriction. Provider and model inference traffic remains available.",
   "settings.experimental.mcpTimeout.title": "MCP Timeout (ms)",
   "settings.experimental.mcpTimeout.description": "Timeout for MCP server requests in milliseconds",
   "settings.experimental.remote.title": "Remote Control",
@@ -1428,8 +1480,7 @@ export const dict = {
     "Query language server. Allows running language server queries for code intelligence.",
   "settings.autoApprove.tool.todoreadwrite": "Manage task list. Allows reading and updating the internal task list.",
   "settings.autoApprove.tool.webfetch": "Fetch a URL. Allows retrieving content from a specific URL.",
-  "settings.autoApprove.tool.websearchcodesearch":
-    "Search web or code. Allows performing external web or code searches.",
+  "settings.autoApprove.tool.websearch": "Search the web. Allows performing external web searches.",
   "settings.autoApprove.tool.doom_loop":
     "Prevent repeated identical actions. Triggered when the same tool call repeats with identical input.",
 
@@ -1458,10 +1509,6 @@ export const dict = {
 
   "settings.display.username.title": "Username",
   "settings.display.username.description": "Custom username displayed in conversations",
-  "settings.display.layout.title": "Layout",
-  "settings.display.layout.description": "Layout mode for the chat interface",
-  "settings.display.layout.auto": "Auto",
-  "settings.display.layout.stretch": "Stretch",
   "settings.display.fontSize.title": "Font Size",
   "settings.display.fontSize.description": "Adjust the Kilo webview UI font size independently from VS Code.",
   "settings.display.reasoningAutoCollapse.title": "Auto-Collapse Reasoning",
@@ -1471,6 +1518,10 @@ export const dict = {
   "settings.display.terminalCommand.description": "Choose whether terminal command blocks start expanded or collapsed.",
   "settings.display.terminalCommand.expanded": "Expanded",
   "settings.display.terminalCommand.collapsed": "Collapsed",
+  "settings.display.codeEdit.title": "Code Edit Blocks",
+  "settings.display.codeEdit.description": "Choose whether code edit and diff blocks start expanded or collapsed.",
+  "settings.display.codeEdit.expanded": "Expanded",
+  "settings.display.codeEdit.collapsed": "Collapsed",
 
   "settings.providers.defaultModel.title": "Default Model",
   "settings.providers.defaultModel.description": "Primary model for conversations",
@@ -1480,6 +1531,9 @@ export const dict = {
   "settings.providers.subagentModel.title": "Subagent Model",
   "settings.providers.subagentModel.description":
     "Default model and reasoning effort for task-tool subagents. Leave unset to inherit the calling agent's model.",
+  "settings.models.hidePromptTraining.title": "Hide Prompt-Training Models",
+  "settings.models.hidePromptTraining.description":
+    "Hide Kilo Gateway models whose providers may use your prompts for training.",
   "settings.providers.modeModels": "Model per Mode",
   "settings.providers.modeModels.description":
     "Override the default model for specific modes. If not set, the global default model is used.",
@@ -1489,7 +1543,7 @@ export const dict = {
   "settings.providers.enabled": "Enabled Providers (Allowlist)",
   "settings.providers.enabled.description": "If set, only these providers will be available (exclusive allowlist)",
   "settings.providers.notSet": "Not set (use server default)",
-  "settings.providers.custom.note": "Add an OpenAI-compatible provider by base URL.",
+  "settings.providers.custom.note": "Add a custom provider by base URL.",
   "settings.providers.search.placeholder": "Search providers",
   "settings.providers.select.placeholder": "Select provider...",
 
@@ -1508,6 +1562,8 @@ export const dict = {
   "settings.aboutKiloCode.legacyMigration.title": "Legacy Migration",
   "settings.aboutKiloCode.legacyMigration.description":
     "Migrate settings from a previous installation of Kilo Code, including provider API keys and default model.",
+  "settings.aboutKiloCode.rooImport.description": "Import conversation history from a Roo Code installation.",
+  "settings.aboutKiloCode.rooImport.button": "Import Sessions from Roo Code",
 
   // Screen 1 — What's New
   "migration.whatsNew.title": "What's New in Kilo Code",

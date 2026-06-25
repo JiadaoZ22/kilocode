@@ -5,7 +5,7 @@ import { Markdown } from "@kilocode/kilo-ui/markdown"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Tooltip } from "@kilocode/kilo-ui/tooltip"
 import { useLanguage } from "../../context/language"
-import { freeDataLabel, isDataCollectedModel, sanitizeName } from "./model-selector-utils"
+import { freeDataLabel, hasByok, isDataCollectedModel, sanitizeName } from "./model-selector-utils"
 import { avgPrice, fmtAttemptCost, fmtCachedPrice, fmtPrice, fmtTerminalBenchScore } from "./model-preview-utils"
 
 interface Props {
@@ -91,9 +91,14 @@ export const ModelPreview: Component<Props> = (props) => {
                       })()}
                     </Show>
                   </div>
-                  <Show when={model().isFree}>
+                  <Show when={model().isFree || hasByok(model()) || isDataCollectedModel(model())}>
                     <span class="model-preview-free-data">
-                      <span class="model-preview-badge model-preview-badge--free">{freeLabel()}</span>
+                      <Show when={model().isFree && !hasByok(model())}>
+                        <span class="model-preview-badge model-preview-badge--free">{freeLabel()}</span>
+                      </Show>
+                      <Show when={hasByok(model())}>
+                        <span class="model-preview-badge">BYOK</span>
+                      </Show>
                       <Show when={isDataCollectedModel(model())}>
                         <Tooltip value={dataLabel()} placement="top">
                           <span class="model-preview-free-data-icon" aria-label={dataLabel()}>

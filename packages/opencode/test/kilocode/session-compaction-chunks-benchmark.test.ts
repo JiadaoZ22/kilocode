@@ -3,8 +3,10 @@ import { Effect, Layer, ManagedRuntime } from "effect"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
+import { Reference } from "../../src/reference/reference"
 import { Plugin } from "../../src/plugin"
-import { WithInstance } from "../../src/project/with-instance"
+import { provideTestInstance } from "../fixture/fixture"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Snapshot } from "../../src/snapshot"
 import { KiloSessionCompaction } from "../../src/kilocode/session/compaction"
@@ -116,22 +118,28 @@ function delayedRuntime(delayMs: number) {
             get message() {
               return input.assistantMessage
             },
-            updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
-            completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
-            process: Effect.fn("TestSessionProcessor.process")((stream: import("../../src/session/llm").LLM.StreamInput) =>
-              Effect.gen(function* () {
-                calls.push(performance.now())
-                yield* Effect.sleep(`${delayMs} millis`)
-                yield* sessions.updatePart({
-                  id: PartID.ascending(),
-                  messageID: input.assistantMessage.id,
-                  sessionID: input.sessionID,
-                  type: "text",
-                  text: "chunk summary",
-                })
-                input.assistantMessage.finish = "stop"
-                return "continue" as const
-              }),
+            updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(
+              (_toolCallID, _update) => Effect.succeed(undefined),
+            ),
+            metadata: Effect.fn("TestSessionProcessor.metadata")(() => Effect.void),
+            completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(
+              (_toolCallID, _output) => Effect.void,
+            ),
+            process: Effect.fn("TestSessionProcessor.process")(
+              (stream: import("../../src/session/llm").LLM.StreamInput) =>
+                Effect.gen(function* () {
+                  calls.push(performance.now())
+                  yield* Effect.sleep(`${delayMs} millis`)
+                  yield* sessions.updatePart({
+                    id: PartID.ascending(),
+                    messageID: input.assistantMessage.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    text: "chunk summary",
+                  })
+                  input.assistantMessage.finish = "stop"
+                  return "continue" as const
+                }),
             ),
           } satisfies SessionProcessorModule.SessionProcessor.Handle),
         ),
@@ -148,7 +156,9 @@ function delayedRuntime(delayMs: number) {
         Layer.provide(Agent.defaultLayer),
         Layer.provide(Plugin.defaultLayer),
         Layer.provide(SyncEvent.defaultLayer),
+        Layer.provide(EventV2Bridge.defaultLayer),
         Layer.provide(RuntimeFlags.layer()),
+        Layer.provide(Reference.defaultLayer),
         Layer.provide(bus),
         Layer.provide(
           Layer.mock(Config.Service)({
@@ -163,7 +173,7 @@ function delayedRuntime(delayMs: number) {
 describe("KiloCompactionChunks benchmark", () => {
   test("processes chunks concurrently (3-at-a-time)", async () => {
     await using tmp = await tmpdir()
-    await WithInstance.provide({
+    await provideTestInstance({
       directory: tmp.path,
       fn: async () => {
         const session = await svc.create({})
@@ -182,7 +192,7 @@ describe("KiloCompactionChunks benchmark", () => {
           }),
         )
 
-        const delayMs = 100
+        const delayMs = 250
         const { rt, calls } = delayedRuntime(delayMs)
         try {
           const msgs = await svc.messages({ sessionID: session.id })
