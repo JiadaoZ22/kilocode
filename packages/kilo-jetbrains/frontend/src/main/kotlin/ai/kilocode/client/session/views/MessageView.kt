@@ -1,5 +1,7 @@
 package ai.kilocode.client.session.views
 
+import ai.kilocode.client.session.SessionFileOpener
+import ai.kilocode.client.session.model.Compaction
 import ai.kilocode.client.session.model.Content
 import ai.kilocode.client.session.model.FileAttachment
 import ai.kilocode.client.session.model.Message
@@ -43,7 +45,7 @@ import javax.swing.SwingUtilities
  */
 class MessageView(
     val msg: Message,
-    private val openFile: (String) -> Unit,
+    private val openFile: SessionFileOpener,
     private var style: SessionEditorStyle = SessionEditorStyle.current(),
     private val openUrl: (String) -> Unit = {},
     private val selection: SessionSelection? = null,
@@ -55,12 +57,17 @@ class MessageView(
     JBUI.scale(SessionUiStyle.SessionLayout.GAP),
 ), Disposable, SessionEditorStyleTarget, SessionView {
 
-    constructor(msg: Message, openFile: (String) -> Unit) : this(msg, openFile, SessionEditorStyle.current())
-
     val role: String get() = msg.info.role
 
     override val sessionViewKind: SessionView.Kind
-        get() = if (role == SessionUiStyle.View.Message.USER_ROLE) SessionView.Kind.UserPrompt else SessionView.Kind.Default
+        get() = if (role == SessionUiStyle.View.Message.USER_ROLE && !compaction) {
+            SessionView.Kind.UserPrompt
+        } else {
+            SessionView.Kind.Default
+        }
+
+    private val compaction: Boolean
+        get() = role == SessionUiStyle.View.Message.USER_ROLE && msg.parts.values.any { it is Compaction }
 
     private val parts = LinkedHashMap<String, PartView>()
     // Adjacent reasoning parts render through the first ReasoningView. aliases maps each
@@ -412,7 +419,7 @@ class MessageView(
     }
 
     override fun paintComponent(g: Graphics) {
-        if (msg.info.role != SessionUiStyle.View.Message.USER_ROLE) {
+        if (msg.info.role != SessionUiStyle.View.Message.USER_ROLE || compaction) {
             super.paintComponent(g)
             return
         }
@@ -490,7 +497,7 @@ class MessageView(
             }
 
             override fun mouseExited(e: MouseEvent) {
-                val point = root.mousePosition
+                val point = runCatching { root.mousePosition }.getOrNull()
                 if (point != null && root.contains(point)) return
                 if (inside(root, e)) return
                 setPromptHovered(false)

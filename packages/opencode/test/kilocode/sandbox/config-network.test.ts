@@ -10,7 +10,6 @@ import { SessionID } from "@/session/schema"
 import { TestConfig } from "../../fixture/config"
 import { testEffect } from "../../lib/effect"
 
-const sessionID = SessionID.make("ses_sandbox_config_network")
 const tool = ToolNetwork.builtin({ id: "webfetch" })
 const ctx = {
   directory: process.cwd(),
@@ -30,10 +29,7 @@ function layer(restrict?: boolean) {
     TestConfig.layer({
       get: () =>
         Effect.succeed({
-          experimental: {
-            sandbox: true,
-            sandbox_restrict_network: restrict,
-          },
+          sandbox: { enabled: true, network: restrict === false ? "allow" : "deny" },
         }),
     }),
   )
@@ -59,6 +55,7 @@ restricted.live("keeps network restriction enabled by default when the sandbox i
   const target = server()
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
+    const sessionID = SessionID.make("ses_sandbox_config_network_restricted")
     const exit = yield* SandboxPolicy.executeTool(sessionID, tool, http.get(target.server.url)).pipe(
       Effect.provideService(InstanceRef, ctx),
       Effect.exit,
@@ -74,14 +71,23 @@ restricted.live("keeps network restriction enabled by default when the sandbox i
   }).pipe(Effect.ensuring(Effect.promise(() => target.server.stop(true))))
 })
 
-open.live("allows tool network traffic when network restriction is disabled", () => {
+open.live("allows network when restriction is disabled without authenticated server control", () => {
   const target = server()
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient
-    const response = yield* SandboxPolicy.executeTool(sessionID, tool, http.get(target.server.url)).pipe(
+    const sessionID = SessionID.make("ses_sandbox_config_network_open")
+    const status = yield* SandboxPolicy.status(sessionID).pipe(Effect.provideService(InstanceRef, ctx))
+    const exit = yield* SandboxPolicy.executeTool(sessionID, tool, http.get(target.server.url)).pipe(
       Effect.provideService(InstanceRef, ctx),
+      Effect.exit,
     )
-    expect(yield* response.text).toBe("sandbox-config-ok")
+    if (!backendSupport().available) {
+      expect(Exit.isSuccess(exit)).toBe(true)
+      expect(target.requests()).toBe(1)
+      return
+    }
+    expect(status.enabled).toBe(true)
+    expect(Exit.isSuccess(exit)).toBe(true)
     expect(target.requests()).toBe(1)
   }).pipe(Effect.ensuring(Effect.promise(() => target.server.stop(true))))
 })
