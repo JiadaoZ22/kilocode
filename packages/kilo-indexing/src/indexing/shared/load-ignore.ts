@@ -215,7 +215,7 @@ export async function loadIgnorePatterns(root: string): Promise<string[]> {
   }
 
   for (const name of files) {
-    const txt = await read(root, name)
+    const txt = await read(path.join(root, name))
     if (!txt?.trim()) {
       continue
     }
