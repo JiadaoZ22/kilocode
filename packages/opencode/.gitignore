@@ -1,6 +1,7 @@
 research
 dist
 dist-*
+dist.old.*
 gen
 app.log
 script/build-*.ts
