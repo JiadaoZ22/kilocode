@@ -8,7 +8,7 @@ import { IndexingStatus, disabledIndexingStatus } from "@kilocode/kilo-indexing/
 import { Telemetry } from "@kilocode/kilo-telemetry"
 import { fetchKiloEmbeddingModelCatalog } from "@kilocode/kilo-gateway"
 import { Instance } from "@/kilocode/instance"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -287,7 +287,7 @@ export namespace KiloIndexing {
     // kilocode_change start - default indexing OFF for the global fallback
     // project and ON for real project workspaces. Explicit config values are
     // still respected.
-    const isGlobalProject = Instance.project.id === ProjectID.global
+    const isGlobalProject = Instance.project.id === ProjectV2.ID.global
     const mergedWithDefaults: IndexingConfig =
       merged?.enabled === undefined ? { ...merged, enabled: !isGlobalProject } : merged
     // kilocode_change end
