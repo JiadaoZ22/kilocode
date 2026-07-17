@@ -1,6 +1,6 @@
 import z from "zod"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { type IndexingTelemetryEvent, type VectorStoreSearchResult } from "@kilocode/kilo-indexing/engine"
 import { toIndexingConfigInput, type IndexingConfig } from "@kilocode/kilo-indexing/config"
 import { hasIndexingPlugin } from "@kilocode/kilo-indexing/detect"
@@ -17,7 +17,8 @@ import { makeRuntime } from "@/effect/run-service"
 import { registerDisposer } from "@/effect/instance-registry"
 import { Global } from "@opencode-ai/core/global"
 import * as Log from "@opencode-ai/core/util/log"
-import type { WorkspaceID } from "@/control-plane/schema"
+import { NamedError } from "@opencode-ai/core/util/error"
+import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { Event as IndexingEvent, Warning as IndexingWarningEvent } from "./indexing-event"
 import { indexingWarningKey, type IndexingWarning } from "./indexing-warning"
@@ -31,6 +32,10 @@ const auth = makeRuntime(Auth.Service, Auth.defaultLayer)
 const missing = () => disabledIndexingStatus("Indexing plugin is not enabled for this workspace.")
 const noWorkspace = () =>
   disabledIndexingStatus("Codebase indexing is disabled because no workspace folder is open in VS Code.")
+
+export const IndexingModelError = NamedError.create("IndexingModelError", {
+  model: Schema.String,
+})
 
 const baselineDirectory = Effect.fn("KiloIndexing.baselineDirectory")(function* (dir: string) {
   if (Instance.project.vcs !== "git") return undefined
@@ -47,8 +52,12 @@ const baselineDirectory = Effect.fn("KiloIndexing.baselineDirectory")(function* 
 })
 
 function failed(err: unknown): z.infer<typeof IndexingStatus> {
-  const msg = err instanceof Error ? err.message : String(err)
-  const text = msg.startsWith("Failed to initialize:") ? msg : `Failed to initialize: ${msg}`
+  const base = IndexingModelError.isInstance(err)
+    ? `Invalid indexing.model "${err.data.model}"`
+    : err instanceof Error
+      ? err.message
+      : String(err)
+  const text = base.startsWith("Failed to initialize:") ? base : `Failed to initialize: ${base}`
 
   return {
     state: "Error",
@@ -86,26 +95,33 @@ function enrichKilo(input: ReturnType<typeof toIndexingConfigInput>, auth: KiloI
 }
 
 async function model(input: ReturnType<typeof toIndexingConfigInput>, auth: KiloIndexingAuth) {
-  if (input.embedderProvider !== "kilo") return input
+  if (input.embedderProvider !== "kilo" || !input.enabled) return input
 
   const catalog = await fetchKiloEmbeddingModelCatalog({ baseURL: auth.baseUrl, token: auth.apiKey })
-  const id = input.modelId ? (catalog.aliases[input.modelId] ?? input.modelId) : catalog.defaultModel
-  const chosen = catalog.models.find((item) => item.id === id)
-  const fallback = catalog.aliases[catalog.defaultModel] ?? catalog.defaultModel
-  const found = chosen ?? catalog.models.find((item) => item.id === fallback)
 
+  if (input.modelId) {
+    const id = catalog.aliases[input.modelId] ?? input.modelId
+    const chosen = catalog.models.find((item) => item.id === id)
+    if (catalog.models.length > 0 && !chosen) {
+      throw new IndexingModelError({ model: input.modelId })
+    }
+    if (chosen) {
+      return {
+        ...input,
+        modelId: chosen.id,
+        modelDimension: chosen.dimension,
+        searchMinScore: input.searchMinScore ?? chosen.scoreThreshold,
+      }
+    }
+  }
+
+  const fallback = catalog.aliases[catalog.defaultModel] ?? catalog.defaultModel
+  const found = catalog.models.find((item) => item.id === fallback)
   if (!found) {
     if (input.modelId || input.modelDimension) {
       log.warn("ignoring unsupported Kilo embedding model configuration", { model: input.modelId })
     }
     return { ...input, modelId: undefined, modelDimension: undefined }
-  }
-
-  if (input.modelId && !chosen) {
-    log.warn("using default Kilo embedding model instead of unsupported configuration", {
-      model: input.modelId,
-      fallback: found.id,
-    })
   }
 
   return {
@@ -203,7 +219,7 @@ export namespace KiloIndexing {
     initialized?: boolean
     current(): Status
     warnings(): IndexingWarning[]
-    scope(workspace: WorkspaceID | undefined): void
+    scope(workspace: WorkspaceV2.ID | undefined): void
     publish(): Promise<void>
     dispose(): Promise<void>
   }
@@ -276,8 +292,14 @@ export namespace KiloIndexing {
       merged?.enabled === undefined ? { ...merged, enabled: !isGlobalProject } : merged
     // kilocode_change end
 
-    const cfgInput = await model(enrichKilo(input(mergedWithDefaults, global), auth), auth)
-    const workspaces = new Set<WorkspaceID | undefined>([WorkspaceContext.workspaceID])
+    let cfgInput: Awaited<ReturnType<typeof model>>
+    try {
+      cfgInput = await model(enrichKilo(input(mergedWithDefaults, global), auth), auth)
+    } catch (err) {
+      log.warn("indexing model resolution failed", { err })
+      return track(hit, await inert(() => failed(err)))
+    }
+    const workspaces = new Set<WorkspaceV2.ID | undefined>([WorkspaceContext.workspaceID])
     const box = { status: pending() }
     const warnings = new Map<string, IndexingWarning>()
     const delivery = {

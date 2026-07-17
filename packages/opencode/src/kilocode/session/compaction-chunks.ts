@@ -11,6 +11,7 @@ import { MessageID, PartID, type SessionID } from "@/session/schema"
 import type { Session } from "@/session/session"
 import { Token } from "@/util/token"
 import * as Log from "@opencode-ai/core/util/log"
+import { Database } from "@opencode-ai/core/database/database"
 
 type Update = <T extends MessageV2.Part>(part: T) => Effect.Effect<T>
 type UpdateMessage = <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
@@ -32,6 +33,7 @@ export namespace KiloCompactionChunks {
   type Output = {
     result: SessionProcessor.Result
     output: string | undefined
+    error: MessageV2.Assistant["error"]
   }
 
   type Deps = {
@@ -270,8 +272,12 @@ export namespace KiloCompactionChunks {
           messages: [...input.data, { role: "user", content: [{ type: "text", text: input.text }] }],
           model: mdl,
         })
-        const parts = MessageV2.parts(worker.message.id)
-        return { result, output: text(worker.message, parts) }
+        const parts = yield* MessageV2.parts(worker.message.id)
+        return {
+          result,
+          output: text(worker.message, parts),
+          error: worker.message.error ?? worker.compactError?.(),
+        }
       }).pipe(
         Effect.ensuring(
           input.session.removeMessage({ sessionID: input.sessionID, messageID: worker.message.id }).pipe(Effect.ignore),
@@ -279,9 +285,37 @@ export namespace KiloCompactionChunks {
       )
       const result = out.result
       const output = out.output
-      if (result !== "continue") return { result, output: undefined }
-      if (!output) return { result: "stop" as const, output: undefined }
-      return { result, output }
+      if (result !== "continue") return { result, output: undefined, error: out.error }
+      if (!output)
+        return {
+          result: "stop" as const,
+          output: undefined,
+          error:
+            out.error ??
+            new MessageV2.APIError({
+              message: "Compaction worker returned an empty response",
+              isRetryable: true,
+            }).toObject(),
+        }
+      return { result, output, error: undefined }
+    })
+  }
+
+  function fatal(output: Output | undefined) {
+    return output?.result === "stop" && !!output.error && output.error.name !== "ContextOverflowError"
+  }
+
+  function fail(input: Input, output: Output | undefined) {
+    return Effect.gen(function* () {
+      if (output?.result !== "stop") return false
+      const error = output.error
+      if (!error || error.name === "ContextOverflowError") return false
+
+      input.target.error = error
+      input.target.finish = "error"
+      input.target.time.completed = Date.now()
+      yield* input.updateMessage(input.target)
+      return true
     })
   }
 
@@ -314,7 +348,9 @@ export namespace KiloCompactionChunks {
     })
   }
 
-  function reduce(input: Input & { summaries: string[]; depth: number }): Effect.Effect<Output> {
+  function reduce(
+    input: Input & { summaries: string[]; depth: number },
+  ): Effect.Effect<Output, never, Database.Service> {
     return Effect.gen(function* () {
       const result = yield* run({ ...input, data: messages({ summaries: input.summaries }), text: input.prompt })
       if (result.result === "continue") return result
@@ -327,9 +363,10 @@ export namespace KiloCompactionChunks {
       const next: Output[] = yield* Effect.forEach(
         groups,
         (group) => reduce({ ...input, summaries: group, depth: input.depth + 1 }),
-        { concurrency: Math.min(CONCURRENCY, groups.length) },
+        { concurrency: 1 },
       )
-      if (next.some((item) => item.result !== "continue" || !item.output)) return result
+      const failed = next.find(fatal) ?? next.find((item) => item.result !== "continue" || !item.output)
+      if (failed) return fatal(failed) ? failed : result
       return yield* reduce({ ...input, summaries: next.map((item) => item.output!), depth: input.depth + 2 })
     })
   }
@@ -340,55 +377,26 @@ export namespace KiloCompactionChunks {
       const chunks = yield* split({ messages: input.messages, model: input.model, size })
       log.info("fallback", { chunks: chunks.length, concurrency: CONCURRENCY })
 
-      // Show live progress on the summary message so users know /compact is
-      // actually working, especially when chunking large sessions.
-      const progressPartID = PartID.ascending()
-      yield* input.updatePart({
-        id: progressPartID,
-        messageID: input.target.id,
-        sessionID: input.sessionID,
-        type: "text",
-        text: `Compacting session summary (${chunks.length} chunks)...`,
+      const partial = yield* Effect.forEach(chunks, (chunk) => summarize({ ...input, chunk, total: chunks.length }), {
+        concurrency: Math.min(CONCURRENCY, chunks.length),
       })
-
-      const partial: Output[] = []
-      for (let i = 0; i < chunks.length; i += CONCURRENCY) {
-        const batch = chunks.slice(i, i + CONCURRENCY)
-        const results = yield* Effect.forEach(
-          batch,
-          (chunk) => summarize({ ...input, chunk, total: chunks.length }),
-          { concurrency: batch.length },
-        )
-        partial.push(...results)
-        if (results.some((result) => result.result !== "continue" || !result.output)) {
-          // Leave the progress text in place so the user sees where it stopped.
-          return "compact" as const
-        }
-        yield* input.updatePart({
-          id: progressPartID,
-          messageID: input.target.id,
-          sessionID: input.sessionID,
-          type: "text",
-          text: `Compacting session summary... (${Math.min(i + CONCURRENCY, chunks.length)}/${chunks.length} chunks summarized)`,
-        })
+      const failed = partial.find(fatal) ?? partial.find((item) => item.result !== "continue" || !item.output)
+      if (failed) {
+        if (yield* fail(input, failed)) return "stop" as const
+        return "compact" as const
       }
-
-      yield* input.updatePart({
-        id: progressPartID,
-        messageID: input.target.id,
-        sessionID: input.sessionID,
-        type: "text",
-        text: `Compacting session summary... reducing ${chunks.length} partial summaries`,
-      })
 
       const final =
         chunks.length === 1 && (yield* large({ messages: chunks[0].messages, model: input.model, size }))
           ? partial[0]
           : yield* reduce({ ...input, summaries: partial.map((item) => item.output!), depth: 0 })
-      if (!final || final.result !== "continue" || !final.output) return "compact" as const
+      if (!final || final.result !== "continue" || !final.output) {
+        if (yield* fail(input, final)) return "stop" as const
+        return "compact" as const
+      }
 
       yield* input.updatePart({
-        id: progressPartID,
+        id: PartID.ascending(),
         messageID: input.target.id,
         sessionID: input.sessionID,
         type: "text",
