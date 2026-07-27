@@ -63,7 +63,9 @@ export namespace MemorySchema {
     explicit: true,
     maxOpsPerRun: 16,
     minIntervalMs: 300_000,
-    timeoutMs: 30_000,
+    // Consolidation prompts can include large diffs/transcripts; give lightweight models enough time
+    // to finish without racing the default 30s window.
+    timeoutMs: 120_000,
   }
 
   const limits: Limits = {
