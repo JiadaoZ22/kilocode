@@ -1258,13 +1258,13 @@ describe("QdrantVectorStore", () => {
       })
     })
 
-    test("should correctly process pathSegments for nested file paths", async () => {
+    test("should correctly process pathSegments for backslash-delimited nested file paths", async () => {
       const mockPoints = [
         {
           id: "test-id-1",
           vector: [0.1, 0.2, 0.3],
           payload: {
-            filePath: "src/components/ui/forms/InputField.tsx",
+            filePath: "src\\components\\ui\\forms\\InputField.tsx",
             content: "export const InputField = () => {}",
             startLine: 1,
             endLine: 3,
@@ -1282,7 +1282,7 @@ describe("QdrantVectorStore", () => {
             id: "test-id-1",
             vector: [0.1, 0.2, 0.3],
             payload: {
-              filePath: "src/components/ui/forms/InputField.tsx",
+              filePath: "src\\components\\ui\\forms\\InputField.tsx",
               content: "export const InputField = () => {}",
               startLine: 1,
               endLine: 3,

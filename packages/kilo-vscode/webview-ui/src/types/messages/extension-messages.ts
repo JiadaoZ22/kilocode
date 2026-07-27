@@ -109,6 +109,11 @@ export interface SendMessageFailedMessage {
   review?: import("../../../../src/shared/review-comments").ReviewMessageData
 }
 
+export interface SessionCommandCompletedMessage {
+  type: "sessionCommandCompleted"
+  messageID: string
+}
+
 // Wire shape lives in src/shared/stream-messages.ts; narrow `part` to the
 // webview's concrete union.
 export type PartUpdatedMessage = PartUpdate<Part>
@@ -163,6 +168,7 @@ export interface SessionCreatedMessage {
   type: "sessionCreated"
   session: SessionInfo
   draftID?: string
+  activate?: boolean
 }
 
 export interface SessionForkedMessage {
@@ -277,6 +283,8 @@ export interface SetChatBoxMessage {
    * mention from a truncated prefix when the real path contains a space.
    */
   paths?: string[]
+  /** Past chats referenced by the restored message, seeded the same way as paths. */
+  sessions?: SessionSearchItem[]
 }
 
 export interface AppendChatBoxMessage {
@@ -342,6 +350,13 @@ export interface IndexingSettingsLoadedMessage {
   type: "indexingSettingsLoaded"
   settings: {
     showButtonWhenDisabled: boolean
+  }
+}
+
+export interface ChatSettingsLoadedMessage {
+  type: "chatSettingsLoaded"
+  settings: {
+    shiftTabCyclesVariant: boolean
   }
 }
 
@@ -443,6 +458,18 @@ export interface FileSearchResultMessage {
   paths: string[]
   items?: FileSearchItem[]
   dir: string
+  requestId: string
+}
+
+export interface SessionSearchItem {
+  id: string
+  title: string
+  updated: number
+}
+
+export interface SessionSearchResultMessage {
+  type: "sessionSearchResult"
+  sessions: SessionSearchItem[]
   requestId: string
 }
 
@@ -578,6 +605,11 @@ export interface TimelineSettingLoadedMessage {
   visible: boolean
 }
 
+export interface ThroughputSettingLoadedMessage {
+  type: "throughputSettingLoaded"
+  visible: boolean
+}
+
 export interface WorkStyleLoadedMessage {
   type: "workStyleLoaded"
   style: WorkStyleState
@@ -641,6 +673,11 @@ export interface AgentManagerSessionForkedMessage {
   sessionId: string
   forkedFromId: string
   worktreeId?: string
+}
+
+export interface AgentManagerSessionClosedMessage {
+  type: "agentManager.sessionClosed"
+  sessionId: string
 }
 
 // Full state push from extension to webview
@@ -1086,6 +1123,7 @@ export type ExtensionMessage =
   | ConnectionStateMessage
   | ErrorMessage
   | SendMessageFailedMessage
+  | SessionCommandCompletedMessage
   | PartUpdatedMessage
   | PartsUpdatedMessage
   | PartRemovedMessage
@@ -1117,6 +1155,7 @@ export type ExtensionMessage =
   | NavigateMessage
   | IndexingStatusLoadedMessage
   | IndexingSettingsLoadedMessage
+  | ChatSettingsLoadedMessage
   | KiloEmbeddingModelsLoadedMessage
   | ImageModelsLoadedMessage
   | ProvidersLoadedMessage
@@ -1132,6 +1171,7 @@ export type ExtensionMessage =
   | SpeechToTextResultMessage
   | SpeechToTextErrorMessage
   | FileSearchResultMessage
+  | SessionSearchResultMessage
   | FilePickerResultMessage
   | TerminalContextResultMessage
   | TerminalContextErrorMessage
@@ -1153,6 +1193,7 @@ export type ExtensionMessage =
   | GlobalConfigLoadedMessage
   | NotificationSettingsLoadedMessage
   | TimelineSettingLoadedMessage
+  | ThroughputSettingLoadedMessage
   | WorkStyleLoadedMessage
   | WorkStyleAppliedMessage
   | WorkStyleApplyFailedMessage
@@ -1162,6 +1203,7 @@ export type ExtensionMessage =
   | AgentManagerWorktreeSetupMessage
   | AgentManagerSessionAddedMessage
   | AgentManagerSessionForkedMessage
+  | AgentManagerSessionClosedMessage
   | AgentManagerStateMessage
   | AgentManagerRunStatusMessage
   | AgentManagerKeybindingsMessage
