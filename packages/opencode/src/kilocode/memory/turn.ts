@@ -11,6 +11,7 @@ import type { Provider } from "@/provider/provider"
 import type { Session } from "@/session/session"
 import type { SessionID } from "@/session/schema"
 import type { SessionSummary } from "@/session/summary"
+import { Config } from "@/config/config"
 import { KiloSession } from "@/kilocode/session"
 import { KiloSessionPrompt } from "@/kilocode/session/prompt"
 import { MemoryModel, MemorySession } from "./ports"
@@ -37,6 +38,7 @@ export namespace MemoryTurn {
     sessions: Session.Interface
     summary: SessionSummary.Interface
     provider: Provider.Interface
+    memoryModel?: string
   }) {
     const ctx = yield* InstanceState.context
     const root = MemoryPaths.root({ ctx })
@@ -46,6 +48,7 @@ export namespace MemoryTurn {
       reason: input.reason,
       session: MemorySession.port({ sessions: input.sessions, summary: input.summary }),
       model: MemoryModel.port({ provider: input.provider }),
+      memoryModel: input.memoryModel,
     })
   })
 }
@@ -59,8 +62,11 @@ export namespace MemoryLifecycle {
     summary: SessionSummary.Interface
     provider: Provider.Interface
     memory: MemoryService.Interface
+    config: Config.Interface
   }) {
     const bridge = yield* EffectBridge.make()
+    const cfg = yield* input.config.get()
+    const memoryModel = cfg.memory?.model ?? undefined
     yield* input.bus.subscribeCallback(KiloSession.Event.TurnOpen, (evt) =>
       bridge.fork(
         Effect.sync(() => MemoryTurn.open({ sessionID: evt.properties.sessionID })).pipe(
@@ -82,6 +88,7 @@ export namespace MemoryLifecycle {
             sessions: input.sessions,
             summary: input.summary,
             provider: input.provider,
+            memoryModel,
           }).pipe(Effect.provideService(MemoryService.Service, input.memory), Effect.ignore)
         }).pipe(
           Effect.catchCause((cause) =>

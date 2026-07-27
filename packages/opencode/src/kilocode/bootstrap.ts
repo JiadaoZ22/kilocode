@@ -6,6 +6,7 @@ import { Global } from "@opencode-ai/core/global"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import path from "node:path"
 import { Bus } from "@/bus"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import { SessionSummary } from "@/session/summary"
@@ -37,6 +38,7 @@ export namespace KilocodeBootstrap {
       installMemoryRuntime()
       const kilo = yield* KiloSessions.Service
       const bus = yield* Bus.Service
+      const config = yield* Config.Service
       const sessions = yield* Session.Service
       const summary = yield* SessionSummary.Service
       const provider = yield* Provider.Service
@@ -46,7 +48,7 @@ export namespace KilocodeBootstrap {
       const init = Effect.fn("KilocodeBootstrap.init")(function* () {
         yield* watcher.init()
         yield* kilo.init()
-        yield* MemoryLifecycle.subscribe({ bus, sessions, summary, provider, memory })
+        yield* MemoryLifecycle.subscribe({ bus, config, sessions, summary, provider, memory })
         // Invalidate enabled cache on every memory state mutation (properties.directory holds the memory root).
         yield* bus.subscribeCallback(MemoryEvents.Status, (evt) =>
           KiloToolRegistry.invalidateMemoryEnabled(evt.properties.directory),
@@ -94,6 +96,7 @@ export namespace KilocodeBootstrap {
 
   export const defaultLayer = layer.pipe(
     Layer.provide([
+      Config.defaultLayer,
       KiloSessions.defaultLayer,
       Session.defaultLayer,
       SessionSummary.defaultLayer,
@@ -108,6 +111,7 @@ export namespace KilocodeBootstrap {
   const watcher = LayerNode.make(KilocodeWatcher.defaultLayer, [])
   export const node = LayerNode.suspend(() =>
     LayerNode.make(layer, [
+      Config.node,
       KiloSessions.node,
       Session.node,
       SessionSummary.node,

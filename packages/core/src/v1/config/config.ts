@@ -236,6 +236,14 @@ export const Info = Schema.Struct({
     Schema.Struct({ url: Schema.optional(Schema.String).annotate({ description: "Enterprise URL" }) }),
   ),
   commit_message: CommitMessageSchema, // kilocode_change
+  memory: Schema.optional(
+    Schema.Struct({
+      model: Schema.optional(Schema.NullOr(Schema.String)).annotate({
+        description:
+          "Model used for memory consolidation in provider/model format. Falls back to the session model when unset or unavailable.",
+      }),
+    }).annotate({ description: "Project memory configuration" }),
+  ),
   tool_output: Schema.optional(
     Schema.Struct({
       max_lines: Schema.optional(PositiveInt).annotate({
