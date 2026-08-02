@@ -305,6 +305,7 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
         let response: OpenAIEmbeddingResponse
 
         if (isFullUrl) {
+          // Use direct HTTP request for full endpoint URLs
           const ctl = new AbortController()
           const timer = setTimeout(() => ctl.abort(), REMOTE_EMBEDDER_REQUEST_TIMEOUT_MS)
           try {
@@ -313,9 +314,13 @@ export class OpenAICompatibleEmbedder implements IEmbedder {
             clearTimeout(timer)
           }
         } else {
+          // Use OpenAI SDK for base URLs
           response = (await this.embeddingsClient.embeddings.create({
             input: batchTexts,
             model: model,
+            // OpenAI package (as of v4.78.1) has a parsing issue that truncates embedding dimensions to 256
+            // when processing numeric arrays, which breaks compatibility with models using larger dimensions.
+            // By requesting base64 encoding, we bypass the package's parser and handle decoding ourselves.
             encoding_format: "base64",
             ...(this.dimensions !== undefined ? { dimensions: this.dimensions } : {}),
           })) as OpenAIEmbeddingResponse

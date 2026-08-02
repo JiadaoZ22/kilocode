@@ -107,11 +107,11 @@
   },
   "dependencies": {
     "@kilocode/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
     "@kilocode/sdk": "workspace:*",
-    "typescript": "catalog:",
     "@aws-sdk/client-s3": "3.933.0",
-    "heap-snapshot-toolkit": "1.1.3"
+    "@morphllm/morphsdk": "0.2.166",
+    "heap-snapshot-toolkit": "1.1.3",
+    "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
