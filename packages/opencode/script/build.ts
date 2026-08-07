@@ -255,7 +255,7 @@ console.log(
 )
 // kilocode_change end
 
-await $`rm -rf dist`
+await fs.promises.rm(path.resolve(dir, "dist"), { recursive: true, force: true })
 const kiloConsoleDist = await buildKiloConsole() // kilocode_change
 
 const binaries: Record<string, string> = {}
@@ -276,7 +276,7 @@ for (const item of targets) {
     .join("-")
 
   console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  await fs.promises.mkdir(path.resolve(dir, `dist/${name}/bin`), { recursive: true })
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
@@ -362,7 +362,7 @@ for (const item of targets) {
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/kilo` // kilocode_change
+    const binaryPath = path.join("dist", name, "bin", `kilo${process.platform === "win32" ? ".exe" : ""}`) // kilocode_change
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
       const versionOutput = await $`${binaryPath} --version`.text()
@@ -376,7 +376,7 @@ for (const item of targets) {
     }
   }
 
-  await $`rm -rf ./dist/${name}/bin/tui`
+  await fs.promises.rm(path.resolve(dir, `dist/${name}/bin/tui`), { recursive: true, force: true })
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
