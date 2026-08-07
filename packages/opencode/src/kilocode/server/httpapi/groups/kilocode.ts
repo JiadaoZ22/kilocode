@@ -5,8 +5,26 @@ import { InstanceContextMiddleware } from "@/server/routes/instance/httpapi/midd
 import {
   WorkspaceRoutingMiddleware,
   WorkspaceRoutingQuery,
+  WorkspaceRoutingQueryFields,
 } from "@/server/routes/instance/httpapi/middleware/workspace-routing"
 import { described } from "@/server/routes/instance/httpapi/groups/metadata"
+import { AnacondaDesktopApi } from "./anaconda-desktop"
+import { Result as AgentRequirementResult } from "@/kilocode/agent-requirements"
+import {
+  Failure as AgentManagerFailure,
+  Request as AgentManagerRequest,
+  RequestID as AgentManagerRequestID,
+  Result as AgentManagerResult,
+} from "@/kilocode/agent-manager/protocol"
+import {
+  Failure as NotebookFailure,
+  Request as NotebookRequest,
+  RequestID as NotebookRequestID,
+  Result as NotebookResult,
+} from "@/kilocode/notebook/protocol"
+import { ModelUsage } from "@/kilocode/session/model-usage"
+import { SessionID } from "@/session/schema"
+import { CommandFiles } from "@/kilocode/command-files"
 
 const root = "/kilocode"
 
@@ -14,14 +32,37 @@ export const RemoveSkillPayload = Schema.Struct({
   location: Schema.String,
 })
 
+export const RemoveCommandPayload = Schema.Struct({
+  location: Schema.String,
+})
+
 export const RemoveAgentPayload = Schema.Struct({
   name: Schema.String,
 })
 
+export const AgentRequirementQuery = Schema.Struct({
+  ...WorkspaceRoutingQueryFields,
+  agent: Schema.String,
+})
+export const NotebookReplyPayload = Schema.Struct({ result: NotebookResult })
+export const NotebookRejectPayload = Schema.Struct({ error: NotebookFailure })
+export const AgentManagerReplyPayload = Schema.Struct({ result: AgentManagerResult })
+export const AgentManagerRejectPayload = Schema.Struct({ error: AgentManagerFailure })
+
 export const KilocodePaths = {
   heapSnapshot: `${root}/heap/snapshot`,
+  agentRequirements: `${root}/agent/requirements`,
+  commandFiles: `${root}/command/files`,
+  removeCommand: `${root}/command/remove`,
   removeSkill: `${root}/skill/remove`,
   removeAgent: `${root}/agent/remove`,
+  notebookList: `${root}/notebook`,
+  notebookReply: `${root}/notebook/:requestID/reply`,
+  notebookReject: `${root}/notebook/:requestID/reject`,
+  agentManagerList: `${root}/agent-manager`,
+  agentManagerReply: `${root}/agent-manager/:requestID/reply`,
+  agentManagerReject: `${root}/agent-manager/:requestID/reject`,
+  sessionModelUsage: `/session/:sessionID/model-usage`,
 } as const
 
 export const KilocodeApi = HttpApi.make("kilocode")
@@ -39,6 +80,38 @@ export const KilocodeApi = HttpApi.make("kilocode")
             description: "Write a heap snapshot for the CLI process to the log directory.",
           }),
         ),
+        HttpApiEndpoint.get("agentRequirements", KilocodePaths.agentRequirements, {
+          query: AgentRequirementQuery,
+          success: described(AgentRequirementResult, "Agent requirement status"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.agentRequirements",
+            summary: "Check agent requirements",
+            description: "Check whether the selected agent's requirements are available in the request directory.",
+          }),
+        ),
+        HttpApiEndpoint.get("commandFiles", KilocodePaths.commandFiles, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(CommandFiles.Info), "Command files"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.commandFiles",
+            summary: "List command files",
+            description: "List commands with editable file locations for settings clients.",
+          }),
+        ),
+        HttpApiEndpoint.post("removeCommand", KilocodePaths.removeCommand, {
+          query: WorkspaceRoutingQuery,
+          payload: RemoveCommandPayload,
+          success: described(Schema.Boolean, "Command removed"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.removeCommand",
+            summary: "Remove a command",
+            description: "Remove a command by deleting its markdown file from disk and clearing it from cache.",
+          }),
+        ),
         HttpApiEndpoint.post("removeSkill", KilocodePaths.removeSkill, {
           query: WorkspaceRoutingQuery,
           payload: RemoveSkillPayload,
@@ -48,7 +121,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
           OpenApi.annotations({
             identifier: "kilocode.removeSkill",
             summary: "Remove a skill",
-            description: "Remove a skill by deleting its directory from disk and clearing it from cache.",
+            description: "Remove a skill by deleting its manifest from disk and clearing it from cache.",
           }),
         ),
         HttpApiEndpoint.post("removeAgent", KilocodePaths.removeAgent, {
@@ -64,6 +137,90 @@ export const KilocodeApi = HttpApi.make("kilocode")
               "Remove a custom (non-native) agent by deleting its markdown file from disk and refreshing state.",
           }),
         ),
+        HttpApiEndpoint.get("notebookList", KilocodePaths.notebookList, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(NotebookRequest), "Pending notebook host requests"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.notebook.list",
+            summary: "List pending notebook requests",
+            description: "List pending native notebook requests for the routed workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("notebookReply", KilocodePaths.notebookReply, {
+          params: { requestID: NotebookRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: NotebookReplyPayload,
+          success: described(Schema.Boolean, "Notebook reply accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.notebook.reply",
+            summary: "Reply to a notebook request",
+            description: "Complete a pending native notebook request with a structured result.",
+          }),
+        ),
+        HttpApiEndpoint.post("notebookReject", KilocodePaths.notebookReject, {
+          params: { requestID: NotebookRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: NotebookRejectPayload,
+          success: described(Schema.Boolean, "Notebook rejection accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.notebook.reject",
+            summary: "Reject a notebook request",
+            description: "Complete a pending native notebook request with a structured host error.",
+          }),
+        ),
+        HttpApiEndpoint.get("agentManagerList", KilocodePaths.agentManagerList, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(AgentManagerRequest), "Pending Agent Manager host requests"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.agentManager.list",
+            summary: "List pending Agent Manager requests",
+            description: "List pending native Agent Manager orchestration requests for the routed workspace.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentManagerReply", KilocodePaths.agentManagerReply, {
+          params: { requestID: AgentManagerRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: AgentManagerReplyPayload,
+          success: described(Schema.Boolean, "Agent Manager reply accepted"),
+          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.agentManager.reply",
+            summary: "Reply to an Agent Manager request",
+            description: "Complete a pending Agent Manager orchestration request with a structured result.",
+          }),
+        ),
+        HttpApiEndpoint.post("agentManagerReject", KilocodePaths.agentManagerReject, {
+          params: { requestID: AgentManagerRequestID },
+          query: WorkspaceRoutingQuery,
+          payload: AgentManagerRejectPayload,
+          success: described(Schema.Boolean, "Agent Manager rejection accepted"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.agentManager.reject",
+            summary: "Reject an Agent Manager request",
+            description: "Complete a pending Agent Manager orchestration request with a structured host error.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionModelUsage", KilocodePaths.sessionModelUsage, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(ModelUsage.Info, "Model usage for a session tree"),
+          error: HttpApiError.NotFound,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "kilocode.sessionModelUsage",
+            summary: "Get session model usage",
+            description: "Get token usage and direct cost by model for the complete top-level session tree.",
+          }),
+        ),
       )
       .annotateMerge(
         OpenApi.annotations({
@@ -75,6 +232,7 @@ export const KilocodeApi = HttpApi.make("kilocode")
       .middleware(WorkspaceRoutingMiddleware)
       .middleware(Authorization),
   )
+  .addHttpApi(AnacondaDesktopApi)
   .annotateMerge(
     OpenApi.annotations({
       title: "kilo HttpApi",

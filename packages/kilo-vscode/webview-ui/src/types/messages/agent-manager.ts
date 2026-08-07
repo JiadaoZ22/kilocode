@@ -1,5 +1,16 @@
 export type WorktreeErrorCode = "git_not_found" | "not_git_repo" | "lfs_missing"
 
+export interface TerminalFont {
+  fontFamily: string
+  fontSize: number
+}
+
+/** Where the terminal button / Focus Terminal shortcut opens a terminal. */
+export type TerminalDestination = "vscode" | "agentManager"
+
+/** Where a terminal lives: main tab strip or right-side inspector panel. */
+export type TerminalPlacement = "tab" | "side"
+
 // Agent Manager worktree state types (mirrored from WorktreeStateManager)
 export interface WorktreeState {
   id: string
@@ -112,10 +123,18 @@ export interface BranchInfo {
   isCheckedOut?: boolean
 }
 
-// Agent Manager Import tab: external worktrees (extension → webview)
-export interface ExternalWorktreeInfo {
-  path: string
-  branch: string
+export type DiffImageError = "too-large" | "unreadable"
+
+export interface DiffImageSide {
+  mime: string
+  bytes: number
+  data?: string
+  error?: DiffImageError
+}
+
+export interface DiffImage {
+  before?: DiffImageSide
+  after?: DiffImageSide
 }
 
 // Shared FileDiff shape (matches Snapshot.FileDiff from CLI backend)
@@ -132,6 +151,8 @@ export interface WorktreeFileDiff {
   generatedLike?: boolean
   summarized?: boolean
   stamp?: string
+  kind?: "image"
+  image?: DiffImage
 }
 
 export type AgentManagerApplyWorktreeDiffStatus = "checking" | "applying" | "success" | "conflict" | "error"
@@ -161,14 +182,7 @@ export interface LocalGitStats {
   behind: number
 }
 
-export interface ReviewComment {
-  id: string
-  file: string
-  side: "additions" | "deletions"
-  line: number
-  comment: string
-  selectedText: string
-}
+export type { ReviewCommentData as ReviewComment } from "../../../../src/shared/review-comments"
 
 /**
  * Maximum number of parallel worktree versions for multi-version mode.
@@ -181,6 +195,7 @@ export interface ModelAllocation {
   providerID: string
   modelID: string
   count: number
+  variant?: string
 }
 
 export type ContinueInWorktreeStatus =

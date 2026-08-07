@@ -12,10 +12,13 @@ import Settings from "../components/settings/Settings"
 import ProvidersTab from "../components/settings/ProvidersTab"
 import ModelsTab from "../components/settings/ModelsTab"
 import AgentBehaviourTab from "../components/settings/AgentBehaviourTab"
+import AutoApproveTab from "../components/settings/AutoApproveTab"
 import ModeEditView from "../components/settings/ModeEditView"
 import McpEditView from "../components/settings/McpEditView"
 import type { AgentConfig, CommandConfig, Config } from "../types/messages"
 import IndexingTab from "../components/settings/IndexingTab"
+import { SidebarEmptyState } from "../components/chat/SidebarEmptyState"
+import { WorkStyleContext, type WorkStyleContextValue } from "../context/work-style"
 
 const meta: Meta = {
   title: "Settings",
@@ -49,6 +52,49 @@ export const SettingsPanel: Story = {
   ),
 }
 
+export const AutoApproveBashOnly: Story = {
+  name: "AutoApproveTab — Bash-only config defaults",
+  render: () => (
+    <StoryProviders config={{ permission: { bash: { "*": "ask", "git status *": "allow" } } } as any}>
+      <div style={{ "max-height": "700px", overflow: "auto" }}>
+        <AutoApproveTab />
+      </div>
+    </StoryProviders>
+  ),
+}
+
+export const SandboxingPanel: Story = {
+  name: "Settings — sandboxing controls",
+  render: () => (
+    <StoryProviders config={{ sandbox: { network: "deny" } }} features={{ sandboxControls: true }}>
+      <div style={{ height: "700px", display: "flex", "flex-direction": "column" }}>
+        <Settings tab="sandboxing" />
+      </div>
+    </StoryProviders>
+  ),
+}
+
+export const SandboxingAllowlist: Story = {
+  name: "Settings — sandboxing with network destinations",
+  render: () => (
+    <StoryProviders
+      config={{
+        sandbox: {
+          enabled: true,
+          network: "deny",
+          allowed_hosts: ["github.com:443", "api.github.com:443"],
+          writable_paths: ["~/shared-output"],
+        },
+      }}
+      features={{ sandboxControls: true }}
+    >
+      <div style={{ height: "700px", display: "flex", "flex-direction": "column" }}>
+        <Settings tab="sandboxing" />
+      </div>
+    </StoryProviders>
+  ),
+}
+
 export const ProvidersConfigure: Story = {
   name: "ProvidersTab — no providers configured",
   render: () => (
@@ -56,6 +102,30 @@ export const ProvidersConfigure: Story = {
       <div style={{ "max-height": "700px", overflow: "auto" }}>
         <ProvidersTab />
       </div>
+    </StoryProviders>
+  ),
+}
+
+/** Opens the Disabled Providers collapsible on mount so the expanded list has coverage. */
+function OpenDisabledProviders() {
+  let ref: HTMLDivElement | undefined
+  onMount(() => {
+    requestAnimationFrame(() => {
+      ref?.querySelector<HTMLButtonElement>('[data-slot="collapsible-trigger"]')?.click()
+    })
+  })
+  return (
+    <div ref={ref} style={{ "max-height": "700px", overflow: "auto" }}>
+      <ProvidersTab />
+    </div>
+  )
+}
+
+export const ProvidersDisabledExpanded: Story = {
+  name: "ProvidersTab — disabled providers expanded",
+  render: () => (
+    <StoryProviders config={{ disabled_providers: ["openai", "anthropic"] } as any}>
+      <OpenDisabledProviders />
     </StoryProviders>
   ),
 }
@@ -82,6 +152,17 @@ export const ModelsAccessibleLabels: Story = {
   ),
 }
 
+export const ModelsSpeechToText: Story = {
+  name: "ModelsTab — speech-to-text model",
+  render: () => (
+    <StoryProviders kiloAuth config={{ experimental: { speech_to_text_model: "google/chirp-3" } } as any}>
+      <div style={{ "max-height": "700px", overflow: "auto" }}>
+        <ModelsTab />
+      </div>
+    </StoryProviders>
+  ),
+}
+
 function OpenModelPicker(props: { children: any }) {
   let ref: HTMLDivElement | undefined
   onMount(() => {
@@ -94,6 +175,36 @@ function OpenModelPicker(props: { children: any }) {
       {props.children}
     </div>
   )
+}
+
+const work: WorkStyleContextValue = {
+  style: () => "unset",
+  loading: () => false,
+  applying: () => false,
+  shouldShowOnboarding: () => true,
+  apply: noop,
+}
+
+function WorkStyleOnboarding() {
+  return (
+    <StoryProviders noPadding>
+      <WorkStyleContext.Provider value={work}>
+        <div style={{ height: "700px", overflow: "auto" }}>
+          <SidebarEmptyState />
+        </div>
+      </WorkStyleContext.Provider>
+    </StoryProviders>
+  )
+}
+
+export const WorkStyleOnboardingDefault: Story = {
+  name: "Work style onboarding — default width",
+  render: () => <WorkStyleOnboarding />,
+}
+
+export const WorkStyleOnboarding200: Story = {
+  name: "Work style onboarding — narrow width",
+  render: () => <WorkStyleOnboarding />,
 }
 
 export const AgentBehaviourAgents: Story = {
@@ -269,6 +380,51 @@ export const AgentBehaviourWorkflowsEmpty: Story = {
   },
 }
 
+/** Skills subtab with seeded long paths/URLs in a narrow container — regression fixture for
+ *  the responsive overflow bug where value cells retained min-content width and pushed the
+ *  remove (×) IconButton off-screen. */
+export const AgentBehaviourSkillsOverflow: Story = {
+  name: "AgentBehaviourTab — skills subtab narrow overflow",
+  render: () => {
+    const session = {
+      ...mockSessionValue({ id: "skills-overflow-story", status: "idle" }),
+      agents: () => MOCK_AGENTS,
+      allAgents: () => MOCK_AGENTS,
+      removeAgent: noop,
+      removeMcp: noop,
+      skills: () => [],
+      refreshSkills: noop,
+      removeSkill: noop,
+    }
+    return (
+      <StoryProviders
+        sessionID="skills-overflow-story"
+        status="idle"
+        config={
+          {
+            skills: {
+              paths: [
+                "/home/user/projects/very-long-directory-name/skills-collection/team-shared",
+                "./relative/path/to/skills/another/very/long/nested/directory",
+              ],
+              urls: [
+                "https://example.com/very/long/path/to/skills/registry/index.json?ref=main&token=abc123",
+                "https://other.example.org/skills/v2/registry.json?namespace=team&version=latest",
+              ],
+            },
+          } as any
+        }
+      >
+        <SessionContext.Provider value={session as any}>
+          <div style={{ width: "320px", height: "700px", overflow: "auto" }}>
+            <SubtabWrapper tab="skills" />
+          </div>
+        </SessionContext.Provider>
+      </StoryProviders>
+    )
+  },
+}
+
 export const McpEditViewLocal: Story = {
   name: "McpEditView — local server (stdio)",
   render: () => (
@@ -438,6 +594,49 @@ export const IndexingProviderBlurRace: Story = {
           </div>
         </StoryProviders>
         <pre data-testid="indexing-provider-save">{JSON.stringify(saved(), null, 2)}</pre>
+      </>
+    )
+  },
+}
+
+export const IndexingScopeSwitch: Story = {
+  name: "IndexingTab - global and local scopes",
+  render: () => {
+    const [global, setGlobal] = createSignal<Record<string, unknown>>({})
+    const [project, setProject] = createSignal<Record<string, unknown>>({})
+    const globalConfig: Config = {
+      indexing: {
+        enabled: true,
+        provider: "openai",
+        model: "text-embedding-3-large",
+        dimension: 3072,
+        vectorStore: "qdrant",
+        openai: { apiKey: "global-secret" },
+        qdrant: { url: "http://global:6333", apiKey: "global-qdrant" },
+        searchMinScore: 0.4,
+      },
+    }
+    const projectConfig: Config = {
+      indexing: {
+        model: null,
+        qdrant: { apiKey: "project-qdrant" },
+      },
+    }
+    return (
+      <>
+        <StoryProviders
+          config={globalConfig}
+          globalConfig={globalConfig}
+          projectConfig={projectConfig}
+          onGlobalConfigChange={(next) => setGlobal((next.indexing ?? {}) as Record<string, unknown>)}
+          onProjectConfigChange={(next) => setProject((next.indexing ?? {}) as Record<string, unknown>)}
+        >
+          <div style={{ width: "420px", "max-height": "700px", overflow: "auto" }}>
+            <IndexingTab />
+          </div>
+        </StoryProviders>
+        <pre data-testid="indexing-global-save">{JSON.stringify(global(), null, 2)}</pre>
+        <pre data-testid="indexing-project-save">{JSON.stringify(project(), null, 2)}</pre>
       </>
     )
   },

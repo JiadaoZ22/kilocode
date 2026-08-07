@@ -18,7 +18,7 @@ import { ProviderContext } from "../context/provider"
 import { flattenModels, findModel as _findModel } from "../context/provider-utils"
 import { ConfigProvider, ConfigContext } from "../context/config"
 import { DisplayProvider } from "../context/display"
-import { DataProvider } from "@kilocode/kilo-ui/context/data"
+import { DataProvider, type OpenDiffFn, type OpenFileFn } from "@kilocode/kilo-ui/context/data"
 import { DiffComponentProvider } from "@kilocode/kilo-ui/context/diff"
 import { CodeComponentProvider } from "@kilocode/kilo-ui/context/code"
 import { FileComponentProvider } from "@kilocode/kilo-ui/context/file"
@@ -29,10 +29,13 @@ import { Diff } from "@kilocode/kilo-ui/diff"
 import { Code } from "@kilocode/kilo-ui/code"
 import { File } from "@kilocode/kilo-ui/file"
 import { SessionContext } from "../context/session"
+import { AgentRequirementsContext, type AgentRequirementsContextValue } from "../context/agent-requirements"
 import { NotificationsContext } from "../context/notifications"
 import { LanguageContext } from "../context/language"
 import { IndexingProvider } from "../context/indexing"
 import { KiloEmbeddingModelsProvider } from "../context/kilo-embedding-models"
+import { MemoryProvider } from "../context/memory"
+import { TranscriptSearchProvider } from "../context/transcript-search"
 import { dict as uiEn } from "@kilocode/kilo-ui/i18n/en"
 import { dict as appEn } from "../i18n/en"
 import { dict as amEn } from "../../agent-manager/i18n/en"
@@ -41,12 +44,14 @@ import { hasIndexingPlugin } from "@kilocode/kilo-indexing/detect"
 import { resolveTemplate } from "../context/language-utils"
 import type {
   Config,
+  FeatureFlags,
   KilocodeNotification,
   PermissionRequest,
   ProviderAuthState,
   SessionCloseReason,
   QuestionRequest,
   SuggestionRequest,
+  AgentRequirementResult,
 } from "../types/messages"
 
 type PluginSpec = string | [string, Record<string, unknown>]
@@ -54,7 +59,8 @@ type PluginSpec = string | [string, Record<string, unknown>]
 // Merged English dictionary (same merge order as the real LanguageProvider)
 const dict: Record<string, string> = { ...appEn, ...amEn, ...uiEn, ...kiloEn }
 
-function t(key: string, params?: Record<string, string | number | boolean | undefined>) {
+/** Story-local translator. Usable outside the provider tree, unlike useLanguage. */
+export function t(key: string, params?: Record<string, string | number | boolean | undefined>) {
   return resolveTemplate(dict[key] ?? key, params)
 }
 
@@ -91,14 +97,20 @@ const MOCK_PROVIDERS = {
 const MOCK_MODELS = flattenModels(MOCK_PROVIDERS as any)
 
 /** A synchronous mock ProviderContext — provides models without waiting for a postMessage round-trip. */
-const MockProviderProvider: ParentComponent<{ kiloAuth?: boolean }> = (props) => {
+const MockProviderProvider: ParentComponent<{ kiloAuth?: boolean; training?: boolean }> = (props) => {
+  const models = createMemo(() =>
+    MOCK_MODELS.map((model) => ({
+      ...model,
+      mayTrainOnYourPrompts: props.training === true,
+    })),
+  )
   const value = {
     providers: () => MOCK_PROVIDERS as any,
     connected: () => ["kilo"],
     defaults: () => ({}),
     defaultSelection: () => ({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" }),
-    models: () => MOCK_MODELS,
-    findModel: (sel: any) => _findModel(MOCK_MODELS, sel),
+    models,
+    findModel: (sel: any) => _findModel(models(), sel),
     authMethods: () => ({}),
     authStates: () => (props.kiloAuth ? { kilo: "oauth" } : {}) as Record<string, ProviderAuthState>,
     isModelValid: () => true,
@@ -117,7 +129,7 @@ export const defaultMockData = {
   part: {} as Record<string, any[]>,
   permission: {} as Record<string, any[]>,
   question: {},
-  provider: { all: [], connected: false, default: {} },
+  provider: { all: new Map(), connected: [], default: {} },
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +199,10 @@ export function mockSessionValue(overrides?: {
     loading: () => false,
     loadingOlderMessages: () => false,
     hasOlderMessages: () => false,
+    submitting: () => false,
+    draftSessionID: () => undefined,
+    setDraftSessionID: noop,
+    userClearedSession: () => false,
     messageMutation: () => undefined,
     messages: () => [],
     visibleMessages: () => [],
@@ -195,6 +211,8 @@ export function mockSessionValue(overrides?: {
     allParts: () => ({}),
     allStatusMap: () => ({}),
     getParts: () => [],
+    getSessionToolParts: () => [],
+    getSessionToolCount: () => 0,
     isErrorHidden: () => false,
     hydrateParts: noop,
     todos: () => [],
@@ -209,11 +227,14 @@ export function mockSessionValue(overrides?: {
     scopedQuestions: (sid?: string) => (sid ? qs.filter((q) => q.sessionID === sid) : qs),
     scopedSuggestions: (sid?: string) => (sid ? suggestions.filter((item) => item.sessionID === sid) : suggestions),
     selected: () => ({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" }),
+    modelForAgent: () => ({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" }),
+    configModelForAgent: () => ({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" }),
     selectModel: noop,
     hasModelOverride: () => false,
     clearModelOverride: noop,
     costBreakdown: () => [],
     contextUsage: () => undefined,
+    modelUsage: () => undefined,
     agents: () => [{ name: "code", description: "Code mode", mode: "primary" as const }],
     allAgents: () => [{ name: "code", description: "Code mode", mode: "primary" as const }],
     skills: () => [],
@@ -223,7 +244,6 @@ export function mockSessionValue(overrides?: {
     selectedAgent: () => "code",
     selectAgent: noop,
     getSessionAgent: () => "code",
-    getSessionModel: () => ({ providerID: "kilo", modelID: "anthropic/claude-sonnet-4-6" }),
     setSessionModel: noop,
     setSessionAgent: noop,
     setSessionVariant: noop,
@@ -234,9 +254,12 @@ export function mockSessionValue(overrides?: {
     revertSession: noop,
     unrevertSession: noop,
     favoriteModels: () => [],
+    recentModels: () => [],
+    modelUsageHistory: () => ({}),
     toggleFavorite: noop,
     variantList: () => [],
     currentVariant: () => undefined,
+    variantForAgent: () => undefined,
     selectVariant: noop,
     sendMessage: noop,
     sendCommand: noop,
@@ -245,16 +268,18 @@ export function mockSessionValue(overrides?: {
     respondToPermission: noop,
     replyToQuestion: noop,
     rejectQuestion: noop,
+    closeQuestion: noop,
     acceptSuggestion: noop,
     dismissSuggestion: noop,
     createSession: noop,
     clearCurrentSession: noop,
     loadSessions: noop,
-    loadOlderMessages: noop,
+    loadOlderMessages: () => false,
     selectSession: noop,
     deleteSession: noop,
     renameSession: noop,
     syncSession: noop,
+    exportSessionTranscript: noop,
     cloudPreviewId: () => null,
     selectCloudSession: noop,
   }
@@ -270,20 +295,42 @@ interface StoryProvidersProps {
   questions?: QuestionRequest[]
   suggestions?: SuggestionRequest[]
   notifications?: KilocodeNotification[]
+  agentRequirements?: AgentRequirementResult
+  agentRequirementsChecking?: boolean
+  agentRequirementsBlocked?: boolean
   status?: string
   sessionID?: string
   /** When provided, injects a mock ConfigContext with this config instead of the real ConfigProvider. */
   config?: Config
+  features?: Partial<FeatureFlags>
+  globalConfig?: Config
+  projectConfig?: Config
   onConfigChange?: (config: Config) => void
+  onGlobalConfigChange?: (config: Config) => void
+  onProjectConfigChange?: (config: Config) => void
+  onOpenDiff?: OpenDiffFn
+  onOpenFile?: OpenFileFn
   kiloAuth?: boolean
+  training?: boolean
   /** When true, renders children without the default 12px padding wrapper */
   noPadding?: boolean
 }
 
 /** Wraps children with either a mock ConfigContext (when config prop is given) or the real ConfigProvider. */
-const ConfigWrapper: ParentComponent<{ config?: Config; onConfigChange?: (config: Config) => void }> = (props) => {
+const ConfigWrapper: ParentComponent<{
+  config?: Config
+  features?: Partial<FeatureFlags>
+  globalConfig?: Config
+  projectConfig?: Config
+  onConfigChange?: (config: Config) => void
+  onGlobalConfigChange?: (config: Config) => void
+  onProjectConfigChange?: (config: Config) => void
+}> = (props) => {
   if (props.config) {
+    const scoped = props.globalConfig !== undefined || props.projectConfig !== undefined
     const [cfg, setCfg] = createSignal(props.config)
+    const [global, setGlobal] = createSignal(props.globalConfig ?? props.config)
+    const [project, setProject] = createSignal(props.projectConfig ?? props.config)
     const [settings, setSettings] = createSignal<Record<string, unknown>>({})
     const [dirty, setDirty] = createSignal(false)
     const features = createMemo(() => {
@@ -292,13 +339,17 @@ const ConfigWrapper: ParentComponent<{ config?: Config; onConfigChange?: (config
       }
 
       return {
-        indexing: hasIndexingPlugin(config.plugin ?? []),
+        indexing: props.features?.indexing ?? hasIndexingPlugin(config.plugin ?? []),
+        sandboxControls: props.features?.sandboxControls ?? false,
       }
     })
 
     const value = {
       config: createMemo(() => cfg()),
-      globalConfig: createMemo(() => cfg()),
+      globalConfig: createMemo(() => (scoped ? global() : cfg())),
+      globalDraft: () => ({}),
+      projectConfig: createMemo(() => (scoped ? project() : cfg())),
+      collections: () => ({}),
       settings,
       features,
       loading: () => false,
@@ -314,16 +365,33 @@ const ConfigWrapper: ParentComponent<{ config?: Config; onConfigChange?: (config
         setDirty(true)
       },
       updateGlobalConfig: (partial: Partial<Config>) => {
-        setCfg((prev) => {
+        const update = (prev: Config) => {
           const next = merge(prev as Record<string, unknown>, partial as Record<string, unknown>) as Config
+          props.onGlobalConfigChange?.(next)
           props.onConfigChange?.(next)
           return next
-        })
+        }
+        if (scoped) setGlobal(update)
+        if (!scoped) setCfg(update)
+        setDirty(true)
+      },
+      updateProjectConfig: (partial: Partial<Config>) => {
+        const update = (prev: Config) => {
+          const next = merge(prev as Record<string, unknown>, partial as Record<string, unknown>) as Config
+          props.onProjectConfigChange?.(next)
+          props.onConfigChange?.(next)
+          return next
+        }
+        if (scoped) setProject(update)
+        if (!scoped) setCfg(update)
         setDirty(true)
       },
       updateSetting: (key: string, value: unknown) => {
         setSettings((prev) => ({ ...prev, [key]: value }))
         setDirty(true)
+      },
+      applySetting: (key: string, value: unknown, _writeKey?: string) => {
+        setSettings((prev) => ({ ...prev, [key]: value }))
       },
       saveConfig: () => setDirty(false),
       discardConfig: () => setDirty(false),
@@ -344,14 +412,38 @@ export const StoryProviders: ParentComponent<StoryProvidersProps> = (props) => {
   })
   const notifications = mockNotificationsValue(props.notifications)
   const [locale] = createSignal<"en">("en")
+  const result = () => props.agentRequirements
+  const visible = () => {
+    const value = result()
+    return value?.state === "blocked" || value?.state === "error"
+  }
+  const requirements: AgentRequirementsContextValue = {
+    result,
+    checking: () => props.agentRequirementsChecking ?? false,
+    blocked: () => {
+      if (props.agentRequirementsBlocked !== undefined) return props.agentRequirementsBlocked
+      const value = result()
+      if (!value) return props.agentRequirementsChecking === true
+      return value.enabled && (value.state === "blocked" || value.state === "error")
+    },
+    visible,
+  }
 
   return (
     <VSCodeProvider>
       <ServerProvider>
         <FeedbackProvider>
-          <ConfigWrapper config={props.config} onConfigChange={props.onConfigChange}>
+          <ConfigWrapper
+            config={props.config}
+            features={props.features}
+            globalConfig={props.globalConfig}
+            projectConfig={props.projectConfig}
+            onConfigChange={props.onConfigChange}
+            onGlobalConfigChange={props.onGlobalConfigChange}
+            onProjectConfigChange={props.onProjectConfigChange}
+          >
             <DisplayProvider>
-              <MockProviderProvider kiloAuth={props.kiloAuth}>
+              <MockProviderProvider kiloAuth={props.kiloAuth} training={props.training}>
                 <DialogProvider>
                   <LanguageContext.Provider
                     value={{
@@ -364,25 +456,36 @@ export const StoryProviders: ParentComponent<StoryProvidersProps> = (props) => {
                     <I18nProvider value={{ locale: () => "en", t }}>
                       <NotificationsContext.Provider value={notifications}>
                         <SessionContext.Provider value={session as any}>
-                          <IndexingProvider>
-                            <KiloEmbeddingModelsProvider>
-                              <DataProvider data={data()} directory="/project/">
-                                <DiffComponentProvider component={Diff}>
-                                  <CodeComponentProvider component={Code}>
-                                    <FileComponentProvider component={File}>
-                                      <MarkedProvider>
-                                        {props.noPadding ? (
-                                          props.children
-                                        ) : (
-                                          <div style={{ padding: "12px" }}>{props.children}</div>
-                                        )}
-                                      </MarkedProvider>
-                                    </FileComponentProvider>
-                                  </CodeComponentProvider>
-                                </DiffComponentProvider>
-                              </DataProvider>
-                            </KiloEmbeddingModelsProvider>
-                          </IndexingProvider>
+                          <AgentRequirementsContext.Provider value={requirements}>
+                            <MemoryProvider>
+                              <IndexingProvider>
+                                <KiloEmbeddingModelsProvider>
+                                  <DataProvider
+                                    data={data()}
+                                    directory="/project/"
+                                    onOpenDiff={props.onOpenDiff}
+                                    onOpenFile={props.onOpenFile}
+                                  >
+                                    <DiffComponentProvider component={Diff}>
+                                      <CodeComponentProvider component={Code}>
+                                        <FileComponentProvider component={File}>
+                                          <MarkedProvider>
+                                            <TranscriptSearchProvider>
+                                              {props.noPadding ? (
+                                                props.children
+                                              ) : (
+                                                <div style={{ padding: "12px" }}>{props.children}</div>
+                                              )}
+                                            </TranscriptSearchProvider>
+                                          </MarkedProvider>
+                                        </FileComponentProvider>
+                                      </CodeComponentProvider>
+                                    </DiffComponentProvider>
+                                  </DataProvider>
+                                </KiloEmbeddingModelsProvider>
+                              </IndexingProvider>
+                            </MemoryProvider>
+                          </AgentRequirementsContext.Provider>
                         </SessionContext.Provider>
                       </NotificationsContext.Provider>
                     </I18nProvider>

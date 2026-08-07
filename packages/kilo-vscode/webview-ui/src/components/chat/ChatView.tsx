@@ -5,7 +5,7 @@
  * Main chat container that combines all chat components
  */
 
-import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { type Component, type JSX, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { Button } from "@kilocode/kilo-ui/button"
 import { Icon } from "@kilocode/kilo-ui/icon"
 import { Spinner } from "@kilocode/kilo-ui/spinner"
@@ -14,15 +14,21 @@ import { showToast } from "@kilocode/kilo-ui/toast"
 import { DropdownMenu } from "@kilocode/kilo-ui/dropdown-menu"
 import { TaskHeader } from "./TaskHeader"
 import { MessageList } from "./MessageList"
+import { AgentRequirements } from "./AgentRequirements"
 import { PromptInput } from "./PromptInput"
 import { PermissionDock } from "./PermissionDock"
 import { StartupErrorBanner } from "./StartupErrorBanner"
+import { SessionTabStrip } from "./SessionTabStrip"
 import { useSession } from "../../context/session"
+import { useLocalTabs } from "../../context/local-tabs"
 import { useVSCode } from "../../context/vscode"
 import { useLanguage } from "../../context/language"
 import { useWorktreeMode } from "../../context/worktree-mode"
 import { useServer } from "../../context/server"
+import { useAgentRequirements } from "../../context/agent-requirements"
+import { TranscriptSearchProvider } from "../../context/transcript-search"
 import { isPromptBlocked, isSuggesting, isQuestioning } from "./prompt-input-utils"
+import { showTabStrip } from "../../utils/local-tabs"
 
 interface ChatViewProps {
   onSelectSession?: (id: string) => void
@@ -33,7 +39,11 @@ interface ChatViewProps {
   /** When true, show the "Continue in Worktree" button. Defaults to true in the sidebar. */
   continueInWorktree?: boolean
   promptBoxId?: string
+  deferFocusToQuestion?: () => boolean
   pendingSessionID?: string
+  focusOnDraftChange?: () => boolean
+  onFocusChange?: (focused: boolean) => void
+  emptyState?: () => JSX.Element
 }
 
 export const ChatView: Component<ChatViewProps> = (props) => {
@@ -42,8 +52,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const language = useLanguage()
   const worktreeMode = useWorktreeMode()
   const server = useServer()
+  const tabs = useLocalTabs()
+  const requirements = useAgentRequirements()
   // Show "Show Changes" only in the standalone sidebar, not inside Agent Manager
   const isSidebar = () => worktreeMode === undefined
+  const pendingSessionID = () => props.pendingSessionID ?? tabs?.pending()
   // Show "Continue in Worktree": only when explicitly enabled via prop
   const canContinueInWorktree = () => props.continueInWorktree === true
 
@@ -70,9 +83,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const standaloneQuestions = createMemo(() => familyQuestions().filter((q) => !q.tool))
   const standaloneSuggestions = createMemo(() => familySuggestions().filter((s) => !s.tool))
   const permissionRequest = () => familyPermissions().find((p) => p.sessionID === id()) ?? familyPermissions()[0]
-  // Prompt input is decoupled from questions/suggestions — only permissions block.
+  // Questions and suggestions do not block input; permissions and agent requirements do.
   // Pending questions and suggestions are auto-dismissed in sendMessage/sendCommand.
-  const blocked = () => isPromptBlocked(familyPermissions().length)
+  const blocked = () => isPromptBlocked(familyPermissions().length) || (!props.readonly && requirements.blocked())
+  const requirementReason = () =>
+    !props.readonly && requirements.blocked() ? language.t("agentRequirements.prompt.blocked") : undefined
   // Session is busy only because a suggestion tool call is pending — prompt should behave as idle
   const suggesting = () => isSuggesting(blocked(), familySuggestions().length)
   // Session is busy only because a question tool call is pending — prompt should behave as idle
@@ -82,7 +97,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   onMount(() => {
     if (props.readonly) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || session.status() === "idle" || e.defaultPrevented) return
+      if (e.key !== "Escape" || (!session.submitting() && session.status() === "idle") || e.defaultPrevented) return
       e.preventDefault()
       session.abort()
     }
@@ -319,49 +334,68 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   )
 
   return (
-    <div class="chat-view">
-      <TaskHeader readonly={props.readonly} />
-      <div class="chat-messages-wrapper">
-        <div class="chat-messages">
-          <MessageList
-            onSelectSession={props.onSelectSession}
-            onShowHistory={props.onShowHistory}
-            onForkMessage={props.onForkMessage}
-            questions={standaloneQuestions}
-            suggestions={standaloneSuggestions}
-            readonly={props.readonly}
-          />
+    <TranscriptSearchProvider>
+      <div class="chat-view">
+        <Show when={isSidebar() && !props.readonly && tabs && showTabStrip(tabs.ids())}>
+          <SessionTabStrip />
+        </Show>
+        <TaskHeader readonly={props.readonly} />
+        <div class="chat-messages-wrapper">
+          <div class="chat-messages">
+            <Show
+              when={!props.readonly && requirements.visible()}
+              fallback={
+                <MessageList
+                  onSelectSession={props.onSelectSession}
+                  onShowHistory={props.onShowHistory}
+                  onForkMessage={props.onForkMessage}
+                  questions={standaloneQuestions}
+                  suggestions={standaloneSuggestions}
+                  readonly={props.readonly}
+                  emptyState={props.emptyState}
+                  announce={isSidebar()}
+                  sessionID={pendingSessionID}
+                />
+              }
+            >
+              <AgentRequirements />
+            </Show>
+          </div>
         </div>
-      </div>
 
-      <Show when={dock()}>
-        <div class="chat-input">
-          <Show when={server.connectionState() === "error" && server.errorMessage()}>
-            <StartupErrorBanner errorMessage={server.errorMessage()!} errorDetails={server.errorDetails()!} />
-          </Show>
-          <Show when={permissionRequest()} keyed>
-            {(perm) => (
-              <PermissionDock
-                request={perm}
-                responding={session.respondingPermissions().has(perm.id)}
-                onDecide={decide}
+        <Show when={dock()}>
+          <div class="chat-input">
+            <Show when={server.connectionState() === "error" && server.errorMessage()}>
+              <StartupErrorBanner errorMessage={server.errorMessage()!} errorDetails={server.errorDetails()!} />
+            </Show>
+            <Show when={permissionRequest()} keyed>
+              {(perm) => (
+                <PermissionDock
+                  request={perm}
+                  responding={session.respondingPermissions().has(perm.id)}
+                  onDecide={decide}
+                />
+              )}
+            </Show>
+            <Show when={!props.readonly && idle() && !blocked() && hasActions(hasMessages())}>
+              {renderActions(hasMessages())}
+            </Show>
+            <Show when={!props.readonly}>
+              <PromptInput
+                blocked={blocked}
+                blockedReason={requirementReason}
+                suggesting={suggesting}
+                questioning={questioning}
+                boxId={props.promptBoxId}
+                deferFocusToQuestion={props.deferFocusToQuestion}
+                pendingSessionID={pendingSessionID()}
+                focusOnDraftChange={props.focusOnDraftChange}
+                onFocusChange={props.onFocusChange}
               />
-            )}
-          </Show>
-          <Show when={!props.readonly && idle() && !blocked() && hasActions(hasMessages())}>
-            {renderActions(hasMessages())}
-          </Show>
-          <Show when={!props.readonly}>
-            <PromptInput
-              blocked={blocked}
-              suggesting={suggesting}
-              questioning={questioning}
-              boxId={props.promptBoxId}
-              pendingSessionID={props.pendingSessionID}
-            />
-          </Show>
-        </div>
-      </Show>
-    </div>
+            </Show>
+          </div>
+        </Show>
+      </div>
+    </TranscriptSearchProvider>
   )
 }

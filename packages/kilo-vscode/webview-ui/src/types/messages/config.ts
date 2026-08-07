@@ -15,11 +15,22 @@ export interface McpConfig {
   enabled?: boolean
 }
 
+export type ConfigOrigin = "project" | "global" | "system" | "default"
+
+export interface ConfigCollectionEntry {
+  key: string
+  source: ConfigOrigin
+}
+
+export type ConfigCollections = Record<string, ConfigCollectionEntry[]>
+
 export interface CommandConfig {
-  template: string
+  template?: string
   description?: string
   agent?: string
-  model?: string
+  model?: string | null
+  variant?: string | null
+  subtask?: boolean
 }
 
 export interface SkillsConfig {
@@ -38,13 +49,25 @@ export interface WatcherConfig {
 }
 
 export interface ExperimentalConfig {
-  disable_paste_summary?: boolean
   batch_tool?: boolean
   codebase_search?: boolean
+  image_generation?: boolean
+  image_generation_model?: string
+  agent_requirements?: boolean
+  native_notebook_tools?: boolean
   speech_to_text_model?: string
   primary_tools?: string[]
   continue_loop_on_deny?: boolean
   mcp_timeout?: number
+  swe_pruner?: boolean
+  swe_pruner_model?: string
+}
+
+export interface SandboxConfig {
+  enabled?: boolean
+  network?: "allow" | "deny"
+  writable_paths?: string[]
+  allowed_hosts?: string[]
 }
 
 export interface CommitMessageConfig {
@@ -85,6 +108,7 @@ export interface IndexingConfig {
   searchMaxResults?: number
   embeddingBatchSize?: number
   scannerMaxBatchRetries?: number
+  fileExtensions?: string[]
 }
 
 export type KiloEmbeddingModel = {
@@ -110,6 +134,7 @@ export interface BrowserSettings {
 }
 
 export type TerminalCommandDisplay = "expanded" | "collapsed"
+export type CodeEditDisplay = "expanded" | "collapsed"
 
 export interface Config {
   permission?: PermissionConfig
@@ -117,6 +142,7 @@ export interface Config {
   small_model?: string | null
   subagent_model?: string | null
   subagent_variant?: string | null
+  subagent_variant_overrides?: Record<string, string | null> | null
   default_agent?: string | null
   agent?: Record<string, AgentConfig>
   provider?: Record<string, ProviderConfig>
@@ -129,6 +155,8 @@ export interface Config {
   snapshot?: boolean
   remote_control?: boolean
   terminal_command_display?: TerminalCommandDisplay
+  code_edit_display?: CodeEditDisplay
+  hide_prompt_training_models?: boolean
   share?: "manual" | "auto" | "disabled"
   username?: string
   watcher?: WatcherConfig
@@ -137,12 +165,14 @@ export interface Config {
   compaction?: CompactionConfig
   commit_message?: CommitMessageConfig
   tools?: Record<string, boolean>
-  layout?: "auto" | "stretch"
+  web_search?: boolean
   auto_collapse_reasoning?: boolean
   experimental?: ExperimentalConfig
+  sandbox?: SandboxConfig
   indexing?: IndexingConfig
 }
 
 export interface FeatureFlags {
   indexing: boolean
+  sandboxControls: boolean
 }

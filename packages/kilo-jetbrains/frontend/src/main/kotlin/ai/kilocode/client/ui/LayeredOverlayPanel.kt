@@ -4,7 +4,6 @@ import ai.kilocode.client.ui.layout.HAlign
 import ai.kilocode.client.ui.layout.VAlign
 import ai.kilocode.client.ui.layout.align
 import com.intellij.util.concurrency.annotations.RequiresEdt
-import com.intellij.util.ui.JBDimension
 import com.intellij.util.ui.components.BorderLayoutPanel
 import java.awt.BorderLayout
 import java.awt.Container
@@ -89,7 +88,7 @@ open class LayeredOverlayPanel(
     override fun getPreferredSize(): Dimension {
         val w = listOf(content, overlay).maxOfOrNull { it.preferredSize.width } ?: 0
         val h = listOf(content, overlay).maxOfOrNull { it.preferredSize.height } ?: 0
-        return JBDimension(w, h)
+        return Dimension(w, h)
     }
 
     open class Overlay : BorderLayoutPanel() {
@@ -108,7 +107,7 @@ open class LayeredOverlayPanel(
 
         override fun contains(x: Int, y: Int): Boolean {
             for (child in components) {
-                if (child.isVisible && child.bounds.contains(x, y)) return true
+                if (child.isVisible && child.bounds.contains(x, y) && child.contains(x - child.x, y - child.y)) return true
             }
             return false
         }
@@ -124,7 +123,7 @@ open class LayeredOverlayPanel(
             val pref = super.getPreferredSize()
             val w = maxOf(pref.width, components.maxOfOrNull { it.preferredSize.width } ?: 0)
             val h = maxOf(pref.height, components.maxOfOrNull { it.preferredSize.height } ?: 0)
-            return JBDimension(w, h)
+            return Dimension(w, h)
         }
     }
 

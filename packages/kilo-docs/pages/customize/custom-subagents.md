@@ -93,6 +93,20 @@ Define agents as markdown files with YAML frontmatter. Place them in:
 
 The **filename** (without `.md`) becomes the agent name.
 
+If `.kilo/agents/` is a symlink to a directory outside the project, allow that exact source in your global `~/.config/kilo/kilo.jsonc`:
+
+```jsonc
+{
+  "permission": {
+    "markdown_source": {
+      "/path/to/shared/agents/*": "allow"
+    }
+  }
+}
+```
+
+Project configuration cannot grant this permission. External agent files remain untrusted: `{env:...}` substitutions are blocked and `{file:...}` substitutions remain confined to the project.
+
 ```markdown
 ---
 description: Reviews code for quality and best practices
@@ -191,7 +205,7 @@ The `permission` field controls what tools the subagent can use. Each tool permi
 }
 ```
 
-For bash commands, you can use glob patterns to set permissions per command. Rules are evaluated in order, with the **last matching rule winning**.
+For bash commands, you can use glob patterns to set permissions per command. Rules are evaluated in order, with the **last matching rule winning**. See [Agent Permissions](/docs/customize/agent-permissions) for rule precedence, shell command patterns, path matching, and sensitive-file behavior.
 
 You can also control which subagents an agent can invoke via `permission.task`:
 
@@ -375,4 +389,4 @@ To disable a built-in agent entirely:
 - [Custom Modes](/docs/customize/custom-modes) — Create specialized primary agents with tool restrictions
 - [Custom Rules](/docs/customize/custom-rules) — Define rules that apply to specific file types or situations
 - [Orchestrator Mode](/docs/code-with-ai/agents/orchestrator-mode) — Legacy mode for task delegation (now built into all agents)
-- [Task Tool](/docs/automate/tools/new-task) — The tool used to invoke subagents
+- [Task tool](/docs/automate/tools) — The tool used to invoke subagents

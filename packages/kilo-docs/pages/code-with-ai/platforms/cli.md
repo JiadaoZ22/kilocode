@@ -65,6 +65,10 @@ Or use npm:
 
 For detailed help on every command and subcommand, see the [CLI Command Reference](/docs/code-with-ai/platforms/cli-reference).
 
+{% callout type="warning" title="Kilo Console is deprecated" %}
+The `kilo console` command and its browser interface are deprecated and will be removed in a future release. Use the CLI TUI, VS Code extension, or JetBrains plugin to run sessions. Use the CLI slash commands, other extensions, or edit Kilo configuration files directly to manage settings.
+{% /callout %}
+
 ### Global Options
 
 | Flag | Description |
@@ -90,8 +94,11 @@ For detailed help on every command and subcommand, see the [CLI Command Referenc
 | `/compact` | `/summarize` | Compact/summarize session |
 | `/undo` | - | Undo previous message |
 | `/redo` | - | Redo message |
-| `/copy` | - | Copy session transcript |
+| `/copy` | - | Copy latest agent response |
+| `/copy-session` | - | Copy session transcript |
 | `/export` | - | Export session transcript |
+| `/move` | - | Move the current session to another project directory |
+| `/diff` | - | Open the diff viewer |
 | `/timestamps` | `/toggle-timestamps` | Show/hide timestamps |
 | `/thinking` | `/toggle-thinking` | Show/hide thinking blocks |
 
@@ -116,7 +123,9 @@ For detailed help on every command and subcommand, see the [CLI Command Referenc
 | `/status` | - | View status |
 | `/themes` | - | Switch theme |
 | `/help` | - | Show help |
+| `/reload` | - | Reload config, skills, agents, and commands from disk |
 | `/editor` | - | Open external editor |
+| `/auto-approve` | `/autoapprove`, `/approve-all`, `/approveall` | Toggle auto-approve mode for all permission prompts (saved to global config) |
 | `/exit` | `/quit`, `/q` | Exit the app |
 
 #### Kilo Gateway Commands (when connected)
@@ -132,8 +141,7 @@ For detailed help on every command and subcommand, see the [CLI Command Referenc
 | Command | Description |
 |---|---|
 | `/init` | Create/update AGENTS.md file for the project |
-| `/local-review` | Review code changes |
-| `/local-review-uncommitted` | Review uncommitted changes |
+| `/review` | Review code changes |
 
 ## Local Code Reviews
 
@@ -143,8 +151,11 @@ Review your code locally before pushing — catch issues early without waiting f
 
 | Command | Description |
 |---|---|
-| `/local-review` | Review current branch changes vs base branch |
-| `/local-review-uncommitted` | Review uncommitted changes (staged + unstaged) |
+| `/review` | Review staged, unstaged, and untracked changes (the default with no arguments) |
+| `/review uncommitted [guidance]` | Review uncommitted changes with optional guidance |
+| `/review branch [base] [guidance]` | Review the current branch against its detected or specified base, with optional guidance |
+| `/review <commit-hash>` | Review a specific commit |
+| `/review <PR URL or number>` | Review a pull request |
 
 ## Config Reference
 
@@ -152,15 +163,76 @@ Configuration is managed through:
 
 - `/connect` command for provider setup (interactive)
 - Config files in **`~/.config/kilo/`**: use **`kilo.jsonc`** for provider, model, permission, and **MCP** settings. Restart the CLI after editing. See [Using MCP in Kilo Code](/docs/automate/mcp/using-in-kilo-code) for MCP config format.
+- **`tui.jsonc`** for terminal UI settings such as notifications, sounds, themes, and keybindings
 - `kilo auth` for credential management
+
+## CLI Notifications and Sounds
+
+CLI attention alerts are disabled by default. Enable and configure them by editing the TUI configuration:
+
+- Edit `~/.config/kilo/tui.jsonc` (or `tui.json`) for global settings.
+- Edit `.kilo/tui.json` (or `tui.jsonc`) for project settings.
+
+Use the following configuration for attention, desktop notification, sound, and volume controls:
+
+```json
+{
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4
+  }
+}
+```
+
+- `enabled` is the master switch. When it is `false`, no attention notifications or sounds are delivered.
+- `notifications` requests a desktop notification when the terminal is not focused. Your terminal and operating system decide whether the notification is displayed.
+- `sound` enables the built-in attention sounds. Sounds can play while the terminal is focused.
+- `volume` accepts a value from `0` to `1`.
+
+### Custom Sounds
+
+To replace individual sounds, add file paths under `attention.sounds`:
+
+```json
+{
+  "attention": {
+    "enabled": true,
+    "sound": true,
+    "volume": 0.4,
+    "sounds": {
+      "question": "./sounds/question.mp3",
+      "permission": "./sounds/permission.mp3",
+      "error": "./sounds/error.mp3",
+      "done": "./sounds/done.mp3"
+    }
+  }
+}
+```
+
+Supported sound names are `default`, `question`, `permission`, `error`, `done`, and `subagent_done`. Relative paths are resolved from the directory containing the TUI configuration file. If an override cannot be loaded, Kilo falls back to the active sound pack and then the built-in `opencode.default` pack.
+
+The `attention.sound_pack` setting selects a sound pack registered by a TUI plugin. Setting an arbitrary pack name does not install or load a pack. Per-event file overrides remain the simplest way to customize sounds without a plugin.
+
+There is no notification slash command or command-palette toggle. Use `tui.json` or `tui.jsonc` so all attention behavior is controlled by the same configuration.
 
 ## Slash Commands
 
 The CLI's interactive mode supports slash commands for common operations. The main commands are documented above in the [Interactive Slash Commands](#interactive-slash-commands) section.
 
-{% callout type="tip" %}
-**Confused about /newtask vs /smol in the IDE?** See the [Using Agents](/docs/code-with-ai/agents/using-agents#understanding-newtask-vs-smol) documentation for details.
-{% /callout %}
+Use `/diff` to review working-tree changes. From the diff viewer, switch the source to the current branch compared with the main branch or to changes from the last assistant turn. Use `/move` to move the current session to another project directory.
+
+The `diff_open` and `session_move` TUI keybindings run the same actions and are unbound by default. Set them under `keybinds` in `tui.jsonc`:
+
+```jsonc
+{
+  "keybinds": {
+    "diff_open": "<leader>d",
+    "session_move": "<leader>o",
+  },
+}
+```
 
 ## Permissions
 
@@ -282,10 +354,14 @@ The Kilo CLI is a fork of [OpenCode](https://opencode.ai) and supports the same 
 
 | Scope | Path |
 |---|---|
-| **Global** | `~/.config/kilo/opencode.json` or `opencode.jsonc` (Windows: config dir may vary; same filenames) |
-| **Project** | `./opencode.json` or `./.opencode/` in project root |
+| **Global** | `~/.config/kilo/kilo.json[c]` or legacy `opencode.json[c]` (Windows config dir may vary) |
+| **Project** | `./kilo.json[c]`, legacy `./opencode.json[c]`, or config inside `./.kilo/` (legacy `./.kilocode/` is also read) |
 
 Project-level configuration takes precedence over global settings.
+
+{% callout type="warning" %}
+**Migrating from opencode?** Kilo no longer falls back to opencode configuration stored in `.opencode` directories (such as `~/.config/opencode` or a project `./.opencode/`). To keep using it, move your global config into `~/.config/kilo/` and any project config into `./.kilo/`.
+{% /callout %}
 
 ### Key Configuration Options
 
@@ -413,6 +489,10 @@ Use `{env:VARIABLE_NAME}` syntax in config files to reference environment variab
 }
 ```
 
+{% callout type="warning" title="Only works in trusted config" %}
+`{env:VAR}` (and `{file:...}`) references are resolved **only** in trusted config: your global config (`~/.config/kilo`), a config passed via `KILO_CONFIG` / `KILO_CONFIG_CONTENT`, or organization/MDM-managed config. A project-level `kilo.json` / `opencode.json` committed to a repository **cannot** use `{env:VAR}` — the reference is ignored and a warning is logged. This prevents a malicious repository from exfiltrating your secrets to an attacker-controlled `baseURL` simply by being opened. `{file:...}` still works in project config, but only for files that resolve inside the project root — references that leave it (absolute paths outside the root, `../` traversal, and symlink escapes) are rejected.
+{% /callout %}
+
 For full details on all configuration options including compaction, file watchers, plugins, and experimental features, see the [OpenCode Config documentation](https://opencode.ai/docs/config).
 
 ## Interactive Mode
@@ -477,6 +557,8 @@ This instructs the AI to proceed without user input.
 - `0`: Success (task completed)
 - `124`: Timeout (task exceeded time limit)
 - `1`: Error (initialization or execution failure)
+
+Without `--auto`, a non-interactive run cannot prompt for approval and auto-rejects any permission request it receives. If a run auto-rejected at least one request, it exits `1` with a stderr diagnostic naming the cause, since the task likely did not complete. Pass `--auto` for autonomous use.
 
 ### Example CI/CD Integration
 

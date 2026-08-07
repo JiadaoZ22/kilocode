@@ -107,6 +107,11 @@
     & > * {
       max-width: 100%;
     }
+
+    [data-slot="popover-trigger"] {
+      min-width: 0;
+      max-width: 100%;
+    }
   }
 }
 
@@ -133,4 +138,11 @@
     font-size: var(--font-size-small);
     text-align: right;
   }
+}
+
+/* Skill Folder Paths / Skill URLs row: tooltip trigger that grows in the
+   flex row and lets the inner span truncate. Applied via Tooltip class. */
+.settings-skills-row-trigger {
+  flex: 1;
+  min-width: 0;
 }

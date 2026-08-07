@@ -1,5 +1,8 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { afterEach, beforeAll, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
+import { Database } from "@opencode-ai/core/database/database"
 import fs from "fs/promises"
 import path from "path"
 import { Agent } from "../../src/agent/agent"
@@ -11,12 +14,13 @@ import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import * as CrossSpawnSpawner from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
-import { Instance } from "../../src/project/instance"
+import { Instance } from "../../src/kilocode/instance"
 import { Session } from "../../src/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID } from "../../src/session/schema"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "../../src/provider/provider"
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "../../src/tool/truncate"
@@ -38,25 +42,27 @@ beforeAll(async () => {
 })
 
 const parent = {
-  providerID: ProviderID.make("parent-provider"),
-  modelID: ModelID.make("parent-model"),
+  providerID: ProviderV2.ID.make("parent-provider"),
+  modelID: ModelV2.ID.make("parent-model"),
 }
 
 const saved = {
-  providerID: ProviderID.make("saved-provider"),
-  modelID: ModelID.make("saved-model"),
+  providerID: ProviderV2.ID.make("saved-provider"),
+  modelID: ModelV2.ID.make("saved-model"),
 }
 
 const cfg = {
-  providerID: ProviderID.make("config-provider"),
-  modelID: ModelID.make("config-model"),
+  providerID: ProviderV2.ID.make("config-provider"),
+  modelID: ModelV2.ID.make("config-model"),
 }
 
+const inherited = "thorough"
+const overrideVariant = "full"
 const savedVariant = "fast"
 const cfgVariant = "balanced"
 const sub = {
-  providerID: ProviderID.make("sub-provider"),
-  modelID: ModelID.make("sub-model"),
+  providerID: ProviderV2.ID.make("sub-provider"),
+  modelID: ModelV2.ID.make("sub-model"),
 }
 const subVariant = "deep"
 
@@ -87,30 +93,35 @@ function custom(id: string, model: string, variants: string[] = []) {
 
 const catalog = {
   provider: {
-    "saved-provider": custom("saved-provider", "saved-model", [savedVariant]),
-    "config-provider": custom("config-provider", "config-model", [cfgVariant]),
-    "sub-provider": custom("sub-provider", "sub-model", [subVariant]),
+    "parent-provider": custom("parent-provider", "parent-model", [inherited, overrideVariant]),
+    "saved-provider": custom("saved-provider", "saved-model", [savedVariant, overrideVariant]),
+    "config-provider": custom("config-provider", "config-model", [cfgVariant, overrideVariant]),
+    "sub-provider": custom("sub-provider", "sub-model", [subVariant, overrideVariant]),
   },
 }
 
 const it = testEffect(
-  Layer.mergeAll(
-    Agent.defaultLayer,
-    BackgroundJob.defaultLayer,
-    Bus.defaultLayer,
-    Config.defaultLayer,
-    RuntimeFlags.layer(),
-    SessionRunState.defaultLayer,
-    SessionStatus.defaultLayer,
-    CrossSpawnSpawner.defaultLayer,
-    Session.defaultLayer,
-    Truncate.defaultLayer,
-    Provider.defaultLayer,
-    ToolRegistry.defaultLayer,
+  LayerNode.compile(
+    LayerNode.group([
+      Agent.node,
+      BackgroundJob.node,
+      Bus.node,
+      Config.node,
+      RuntimeFlags.node,
+      SessionRunState.node,
+      SessionStatus.node,
+      CrossSpawnSpawner.node,
+      Session.node,
+      SessionProjector.node,
+      Truncate.node,
+      Provider.node,
+      ToolRegistry.node,
+      Database.node,
+    ]),
   ),
 )
 
-const seed = Effect.fn("TaskToolModelTest.seed")(function* (title = "Parent") {
+const seed = Effect.fn("TaskToolModelTest.seed")(function* (title = "Parent", variant?: string) {
   const session = yield* Session.Service
   const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
@@ -133,6 +144,7 @@ const seed = Effect.fn("TaskToolModelTest.seed")(function* (title = "Parent") {
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     modelID: parent.modelID,
     providerID: parent.providerID,
+    variant,
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
@@ -149,7 +161,6 @@ function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void;
     cancel: () => Effect.void,
     resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
     prompt,
-    loop: (input) => prompt({ sessionID: input.sessionID, parts: [] }),
   }
 }
 
@@ -194,7 +205,8 @@ function run(input: {
   agent: "pinned" | "worker"
   state?: unknown
   client?: string
-  config?: Pick<Config.Info, "subagent_model" | "subagent_variant">
+  variant?: string
+  config?: Pick<Config.Info, "subagent_model" | "subagent_variant" | "subagent_variant_overrides">
 }) {
   return provideTmpdirInstance(
     () =>
@@ -202,7 +214,7 @@ function run(input: {
         process.env.KILO_CLIENT = input.client ?? "cli"
         if (input.state) yield* writeState(input.state)
 
-        const { chat, assistant } = yield* seed(input.agent)
+        const { chat, assistant } = yield* seed(input.agent, input.variant)
         const tool = yield* TaskTool
         const def = yield* tool.init()
         let seen: SessionPrompt.PromptInput | undefined
@@ -282,6 +294,7 @@ describe("tool.task model resolution", () => {
   it.live("saved model without variant leaves variant undefined", () =>
     run({
       agent: "worker",
+      variant: inherited,
       state: { model: { worker: saved } },
     }).pipe(
       Effect.tap((result) =>
@@ -330,6 +343,7 @@ describe("tool.task model resolution", () => {
   it.live("configured subagent default model and variant apply to task workers", () =>
     run({
       agent: "worker",
+      variant: inherited,
       config: { subagent_model: "sub-provider/sub-model", subagent_variant: subVariant },
     }).pipe(
       Effect.tap((result) =>
@@ -346,6 +360,7 @@ describe("tool.task model resolution", () => {
   it.live("per-agent task model remains above the configured subagent default", () =>
     run({
       agent: "pinned",
+      variant: inherited,
       config: { subagent_model: "sub-provider/sub-model", subagent_variant: subVariant },
     }).pipe(
       Effect.tap((result) =>
@@ -359,17 +374,107 @@ describe("tool.task model resolution", () => {
     ),
   )
 
+  it.live("model-specific override replaces an inherited parent variant", () =>
+    run({
+      agent: "worker",
+      variant: inherited,
+      config: { subagent_variant_overrides: { "parent-provider/parent-model": overrideVariant } },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(parent)
+          expect(result.variant).toEqual(overrideVariant)
+          expect(result.model).toEqual(parent)
+          expect(result.metadataVariant).toEqual(overrideVariant)
+        }),
+      ),
+    ),
+  )
+
+  it.live("model-specific override applies to a custom subagent model and variant", () =>
+    run({
+      agent: "pinned",
+      variant: inherited,
+      config: { subagent_variant_overrides: { "config-provider/config-model": overrideVariant } },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(cfg)
+          expect(result.variant).toEqual(overrideVariant)
+          expect(result.model).toEqual(cfg)
+          expect(result.metadataVariant).toEqual(overrideVariant)
+        }),
+      ),
+    ),
+  )
+
+  it.live("model-specific override follows a saved custom subagent model", () =>
+    run({
+      agent: "worker",
+      state: { model: { worker: saved }, variant: { "saved-provider/saved-model": savedVariant } },
+      config: { subagent_variant_overrides: { "saved-provider/saved-model": overrideVariant } },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(saved)
+          expect(result.variant).toEqual(overrideVariant)
+          expect(result.model).toMatchObject({ ...saved, variant: overrideVariant })
+          expect(result.metadataVariant).toEqual(overrideVariant)
+        }),
+      ),
+    ),
+  )
+
+  it.live("stale model-specific override preserves the resolved variant", () =>
+    run({
+      agent: "pinned",
+      variant: inherited,
+      config: { subagent_variant_overrides: { "config-provider/config-model": "gone" } },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(cfg)
+          expect(result.variant).toEqual(cfgVariant)
+          expect(result.model).toEqual(cfg)
+          expect(result.metadataVariant).toEqual(cfgVariant)
+        }),
+      ),
+    ),
+  )
+
+  it.live("unavailable configured subagent model falls back to the parent model override", () =>
+    run({
+      agent: "worker",
+      variant: inherited,
+      config: {
+        subagent_model: "missing-provider/missing-model",
+        subagent_variant: subVariant,
+        subagent_variant_overrides: { "parent-provider/parent-model": overrideVariant },
+      },
+    }).pipe(
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result.prompt).toEqual(parent)
+          expect(result.variant).toEqual(overrideVariant)
+          expect(result.model).toEqual(parent)
+          expect(result.metadataVariant).toEqual(overrideVariant)
+        }),
+      ),
+    ),
+  )
+
   it.live("unavailable configured subagent model falls back to the parent model", () =>
     run({
       agent: "worker",
+      variant: inherited,
       config: { subagent_model: "missing-provider/missing-model", subagent_variant: subVariant },
     }).pipe(
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result.prompt).toEqual(parent)
-          expect(result.variant).toBeUndefined()
+          expect(result.variant).toEqual(inherited)
           expect(result.model).toEqual(parent)
-          expect(result.metadataVariant).toBeUndefined()
+          expect(result.metadataVariant).toEqual(inherited)
         }),
       ),
     ),
@@ -391,16 +496,17 @@ describe("tool.task model resolution", () => {
     ),
   )
 
-  it.live("no file and no agent config falls back to parent for worker", () =>
+  it.live("no file and no agent config inherits the parent model and variant", () =>
     run({
       agent: "worker",
+      variant: inherited,
     }).pipe(
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result.prompt).toEqual(parent)
-          expect(result.variant).toBeUndefined()
+          expect(result.variant).toEqual(inherited)
           expect(result.model).toEqual(parent)
-          expect(result.metadataVariant).toBeUndefined()
+          expect(result.metadataVariant).toEqual(inherited)
         }),
       ),
     ),

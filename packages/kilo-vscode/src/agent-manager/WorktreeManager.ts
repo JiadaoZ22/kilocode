@@ -13,6 +13,7 @@ import simpleGit, { type SimpleGit } from "simple-git"
 import { generateBranchName, sanitizeBranchName } from "./branch-name"
 import { type GitOps, isKiloOwnedSshCommand, nonInteractiveEnv } from "./GitOps"
 import { execWithShellEnv } from "./shell-env"
+import { execGhRead } from "./gh"
 import { markNoIndex } from "../util/spotlight"
 import {
   parsePRUrl,
@@ -65,11 +66,6 @@ export interface CreateWorktreeResult {
   remote?: string
   startPointSource: StartPointSource
   startPointWarning?: string
-}
-
-export interface ExternalWorktreeItem {
-  path: string
-  branch: string
 }
 
 /**
@@ -146,11 +142,37 @@ export class WorktreeManager {
     prompt?: string
     existingBranch?: string
     baseBranch?: string
+    baseRef?: string
     branchName?: string
     onProgress?: (step: WorktreeProgressStep, message: string, detail?: string) => void
   }): Promise<CreateWorktreeResult> {
     await this.ensureMigrated()
     return this.withGitLock(() => this.createWorktreeImpl(params))
+  }
+
+  async renameBranch(worktreePath: string, current: string, requested: string): Promise<string> {
+    await this.ensureMigrated()
+    return this.withGitLock(() => this.renameBranchImpl(worktreePath, current, requested))
+  }
+
+  /** Whether the worktree has uncommitted changes or commits ahead of base.
+   *  Used to defer automatic branch naming until the branch carries real work. */
+  async hasWork(worktreePath: string, base: string): Promise<boolean> {
+    if (!this.isManagedPath(worktreePath)) return false
+    return this.withGitLock(async () => {
+      const git = simpleGit(worktreePath)
+      const status = await git.status()
+      if (status.files.length > 0) return true
+      return git
+        .raw(["rev-list", "--count", `${base}..HEAD`])
+        .then((count) => parseInt(count.trim(), 10) > 0)
+        .catch((error) => {
+          // An unresolvable base ref means no work to compare; other git
+          // failures also fail safe to "no work", keeping the placeholder name.
+          this.log(`hasWork rev-list failed: ${error}`)
+          return false
+        })
+    })
   }
 
   private async ensureGitAvailable(): Promise<void> {
@@ -170,6 +192,7 @@ export class WorktreeManager {
     prompt?: string
     existingBranch?: string
     baseBranch?: string
+    baseRef?: string
     branchName?: string
     onProgress?: (step: WorktreeProgressStep, message: string, detail?: string) => void
   }): Promise<CreateWorktreeResult> {
@@ -218,41 +241,23 @@ export class WorktreeManager {
       startPoint = await this.resolveStartPoint(requestedBase, params.onProgress, {
         allowFallback: !params.baseBranch, // Only fallback if user didn't explicitly request a specific base
       })
+      if (params.baseRef && !(await this.refExistsLocally(params.baseRef))) {
+        throw new Error(`Could not resolve start point for ref "${params.baseRef}"`)
+      }
       parent = startPoint.branch
       parentRemote = startPoint.remote
     }
 
-    const sanitized = params.branchName ? sanitizeBranchName(params.branchName) : undefined
-    let branch: string
-    if (params.existingBranch) {
-      branch = params.existingBranch
-    } else if (sanitized) {
-      branch = sanitized
-    } else {
-      const existing = await this.git
-        .branch()
-        .then((b) => b.all)
-        .catch(() => [] as string[])
-      branch = generateBranchName(params.prompt || "agent-task", existing)
-    }
-
-    if (params.existingBranch) {
-      const exists = await this.branchExists(branch)
-      if (!exists) throw new Error(`Branch "${branch}" does not exist`)
-    }
-
+    let branch = await this.resolveBranch(params)
     const dirName = branch.replace(/\//g, "-")
     let worktreePath = path.join(this.dir, dirName)
 
-    if (fs.existsSync(worktreePath)) {
-      this.log(`Worktree directory exists, cleaning up before re-creation: ${worktreePath}`)
-      await this.removeWorktreeImpl(worktreePath)
-    }
+    await this.prepareWorktreePath(worktreePath, !!params.existingBranch)
 
     params.onProgress?.("creating", `Creating worktree for ${branch}...`)
 
     // Dereference to commit SHA to prevent upstream tracking for new branches
-    const startRef = params.existingBranch ? undefined : `${startPoint.ref}^{commit}`
+    const startRef = params.existingBranch ? undefined : `${params.baseRef ?? startPoint.ref}^{commit}`
 
     try {
       const args = params.existingBranch
@@ -270,8 +275,8 @@ export class WorktreeManager {
       if (!msg.includes("already exists") || params.existingBranch) {
         throw new Error(`Failed to create worktree: ${msg}`)
       }
-      // Branch name collision -- retry with unique suffix
-      branch = `${branch}-${Date.now()}`
+      // Another process may create the branch after resolveBranch checks it.
+      branch = await this.resolveBranch(params)
       const retryDir = branch.replace(/\//g, "-")
       worktreePath = path.join(this.dir, retryDir)
       const retryArgs = params.existingBranch
@@ -290,6 +295,78 @@ export class WorktreeManager {
       remote: parentRemote,
       startPointSource: startPoint.source,
       startPointWarning: startPoint.warning,
+    }
+  }
+
+  private async renameBranchImpl(worktreePath: string, current: string, requested: string): Promise<string> {
+    if (!this.isManagedPath(worktreePath)) throw new Error("Worktree is not managed by Agent Manager")
+
+    const git = simpleGit(worktreePath)
+    const actual = (await git.revparse(["--abbrev-ref", "HEAD"])).trim()
+    if (actual === "HEAD" || actual !== current) throw new Error("Branch changed before automatic naming")
+
+    const upstream = (
+      await this.git.raw(["for-each-ref", "--format=%(upstream:short)", `refs/heads/${current}`])
+    ).trim()
+    if (upstream) throw new Error("Branch already has an upstream")
+
+    const remotes = (await this.git.raw(["for-each-ref", "--format=%(refname:short)", "refs/remotes"])).split("\n")
+    if (remotes.some((ref) => ref.endsWith(`/${current}`))) throw new Error("Branch already exists on a remote")
+
+    const base = requested.trim()
+    if (!base || base === current) throw new Error("Generated branch name is unchanged")
+    await this.git.raw(["check-ref-format", "--branch", base])
+
+    const locals = new Set((await this.git.branch()).all)
+    const remoteNames = new Set(remotes.filter(Boolean).map((ref) => ref.replace(/^[^/]+\//, "")))
+    const available = (name: string) => !locals.has(name) && !remoteNames.has(name)
+    const branch = available(base)
+      ? base
+      : Array.from({ length: 10_000 }, (_, index) => `${base}-${index + 2}`).find(available)
+    if (!branch) throw new Error("No available generated branch name")
+
+    await git.raw(["branch", "-m", current, branch])
+    this.log(`Renamed branch: ${current} -> ${branch}`)
+    return branch
+  }
+
+  private async prepareWorktreePath(worktreePath: string, reuse: boolean): Promise<void> {
+    if (!fs.existsSync(worktreePath)) return
+    if (!reuse) throw new Error(`Worktree path already exists: ${worktreePath}`)
+    this.log(`Worktree directory exists, cleaning up before re-creation: ${worktreePath}`)
+    await this.removeWorktreeImpl(worktreePath)
+  }
+
+  private async resolveBranch(params: {
+    prompt?: string
+    existingBranch?: string
+    branchName?: string
+  }): Promise<string> {
+    if (params.existingBranch) {
+      const exists = await this.branchExists(params.existingBranch)
+      if (!exists) throw new Error(`Branch "${params.existingBranch}" does not exist`)
+      return params.existingBranch
+    }
+
+    const existing = await this.git
+      .branch()
+      .then((result) => result.all)
+      .catch(() => [] as string[])
+    const sanitized = params.branchName ? sanitizeBranchName(params.branchName) : undefined
+    const branch = sanitized || generateBranchName(params.prompt || "agent-task", existing)
+    return this.availableBranch(branch, existing)
+  }
+
+  private availableBranch(base: string, existing: string[]): string {
+    const branches = new Set(existing)
+    const available = (branch: string) => {
+      const dir = path.join(this.dir, branch.replace(/\//g, "-"))
+      return !branches.has(branch) && !fs.existsSync(dir)
+    }
+    if (available(base)) return base
+    for (let suffix = 2; ; suffix++) {
+      const branch = `${base}-${suffix}`
+      if (available(branch)) return branch
     }
   }
 
@@ -734,7 +811,7 @@ export class WorktreeManager {
 
     // 4. Derived fallback
     if (allowFallback) {
-      const fallbacks = await this.derivedFallbackBranches(branch)
+      const fallbacks = await this.derivedFallbackBranches()
       for (const fallback of fallbacks) {
         if (fallback === branch) continue // already tried
         try {
@@ -782,7 +859,7 @@ export class WorktreeManager {
     }
   }
 
-  async derivedFallbackBranches(requested: string): Promise<string[]> {
+  async derivedFallbackBranches(): Promise<string[]> {
     const defaults = []
     try {
       defaults.push(await this.defaultBranch())
@@ -934,22 +1011,6 @@ export class WorktreeManager {
     }
   }
 
-  async listExternalWorktrees(managedPaths: Set<string>): Promise<ExternalWorktreeItem[]> {
-    try {
-      const raw = await this.git.raw(["worktree", "list", "--porcelain"])
-      const normalizedRoot = normalizePath(this.root)
-      const normalizedManaged = new Set([...managedPaths].map(normalizePath))
-      return parseWorktreeList(raw)
-        .filter(
-          (e) => !e.bare && normalizePath(e.path) !== normalizedRoot && !normalizedManaged.has(normalizePath(e.path)),
-        )
-        .map((e) => ({ path: e.path, branch: e.branch }))
-    } catch (error) {
-      this.log(`Failed to list external worktrees: ${error}`)
-      return []
-    }
-  }
-
   async createFromPR(url: string): Promise<CreateWorktreeResult> {
     return this.withGitLock(() => this.createFromPRImpl(url))
   }
@@ -983,8 +1044,7 @@ export class WorktreeManager {
 
   private async fetchPRInfo(parsed: { owner: string; repo: string; number: number }): Promise<PRInfo> {
     try {
-      const json = await this.exec(
-        "gh",
+      const json = await this.gh(
         [
           "pr",
           "view",
@@ -1037,6 +1097,11 @@ export class WorktreeManager {
 
   private async exec(cmd: string, args: string[], timeout = 120000): Promise<string> {
     const { stdout } = await execWithShellEnv(cmd, args, { cwd: this.root, timeout })
+    return stdout
+  }
+
+  private async gh(args: string[], timeout = 120000): Promise<string> {
+    const { stdout } = await execGhRead(args, { cwd: this.root, timeout })
     return stdout
   }
 
