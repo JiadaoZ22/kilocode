@@ -4,10 +4,15 @@ import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { Reference } from "../../src/reference/reference"
+import { Reference } from "@opencode-ai/core/reference"
+import { RepositoryCache } from "@opencode-ai/core/repository-cache"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Global } from "@opencode-ai/core/global"
+import { Database } from "@opencode-ai/core/database/database"
 import { Plugin } from "../../src/plugin"
 import { provideTestInstance } from "../fixture/fixture"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Snapshot } from "../../src/snapshot"
 import { KiloSessionCompaction } from "../../src/kilocode/session/compaction"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -22,8 +27,8 @@ import { ProviderTest } from "../fake/provider"
 import { Agent } from "../../src/agent/agent"
 import { tmpdir } from "../fixture/fixture"
 
-const providerID = ProviderID.make("test")
-const modelID = ModelID.make("test-model")
+const providerID = ProviderV2.ID.make("test")
+const modelID = ModelV2.ID.make("test-model")
 const ref = { providerID, modelID }
 
 function run<A, E>(fx: Effect.Effect<A, E, SessionNs.Service>) {
@@ -158,7 +163,23 @@ function delayedRuntime(delayMs: number) {
         Layer.provide(SyncEvent.defaultLayer),
         Layer.provide(EventV2Bridge.defaultLayer),
         Layer.provide(RuntimeFlags.layer()),
-        Layer.provide(Reference.defaultLayer),
+        Layer.provide(
+          Reference.layer.pipe(
+            Layer.provide(
+              Layer.mock(RepositoryCache.Service)({
+                ensure: () => Effect.die("unexpected Git materialization"),
+              }),
+            ),
+            Layer.provide(
+              Layer.mock(EventV2.Service)({
+                publish: (definition, data) =>
+                  Effect.succeed({ id: EventV2.ID.make("evt_reference"), type: definition.type, data }),
+              }),
+            ),
+            Layer.provide(Global.defaultLayer),
+          ),
+        ),
+        Layer.provide(Database.defaultLayer),
         Layer.provide(bus),
         Layer.provide(
           Layer.mock(Config.Service)({
