@@ -8,7 +8,7 @@
  * 3. Injecting Kilo-specific dependencies
  * 4. Preserving Kilo's version number
  * 5. Preserving overrides and patchedDependencies
- * 6. Preserving Kilo's repository configuration
+ * 6. Preserving Kilo's repository metadata
  * 7. Using "newest wins" strategy for dependency versions
  */
 
@@ -133,6 +133,19 @@ export function fixPackageManager(
   const prior = typeof pkg.packageManager === "string" ? pkg.packageManager : "missing or invalid"
   changes.push(`packageManager: ${prior} -> ${next} (preserved Kilo pin)`)
   pkg.packageManager = next
+}
+
+export function fixRepository(
+  pkg: Record<string, unknown>,
+  ours: Record<string, unknown> | null,
+  changes: string[],
+): void {
+  if (!ours) return
+  for (const key of ["repository", "homepage", "bugs"] as const) {
+    if (ours[key] === undefined || JSON.stringify(pkg[key]) === JSON.stringify(ours[key])) continue
+    pkg[key] = ours[key]
+    changes.push(`${key}: preserved Kilo metadata`)
+  }
 }
 
 export function assertBunPackageManager(current: unknown, base: unknown, upstream: unknown): void {
@@ -269,16 +282,31 @@ const TRANSFORM_PACKAGE_NAMES: Record<string, string> = {
 // Upstream's version wholesale-replaces the scripts block, so anything listed
 // here gets re-applied from ours after taking theirs.
 const PRESERVE_SCRIPTS: Record<string, string[]> = {
-  "package.json": ["extension", "changeset", "changeset:version", "dev-setup", "postinstall", "dev:local"],
+  "package.json": [
+    "extension",
+    "extension:isolated",
+    "extension:isolated:clean",
+    "changeset",
+    "changeset:version",
+    "dev-setup",
+    "postinstall",
+    "dev:local",
+    "test:script:ci",
+  ],
   "packages/opencode/package.json": ["test", "test:ci"],
   // Upstream-shared packages where Kilo adds a JUnit test:ci script for CI.
   // Without these entries every merge silently schedules zero tests for them.
   "packages/core/package.json": ["test:ci"],
   "packages/effect-drizzle-sqlite/package.json": ["test:ci"],
   "packages/http-recorder/package.json": ["test:ci"],
+  "packages/client/package.json": ["test:ci"],
+  "packages/httpapi-codegen/package.json": ["test:ci"],
   "packages/llm/package.json": ["test:ci"],
+  "packages/sdk-next/package.json": ["test:ci"],
+  "packages/session-ui/package.json": ["test:ci"],
   "packages/tui/package.json": ["test:ci"],
   "packages/ui/package.json": ["test:ci"],
+  "packages/codemode/package.json": ["test:ci"],
 }
 
 // Upstream-only trusted dependencies to delete per package.json. Trusted deps
@@ -293,15 +321,17 @@ const DELETE_UPSTREAM_TRUSTED_DEPS: Record<string, string[]> = {
 // Kilo doesn't ship (desktop-electron, console/app, app) and would otherwise
 // reappear on every merge.
 const DELETE_UPSTREAM_SCRIPTS: Record<string, string[]> = {
-  "package.json": ["dev:desktop", "dev:web", "dev:console"],
+  "package.json": ["dev:desktop", "dev:web", "dev:console", "translate:app"],
 }
 
 // Upstream-only catalog entries to delete per package.json. These are pulled
 // in by upstream features (e.g. desktop Sentry integration) that Kilo doesn't
 // ship, so they add install weight with zero consumers in our tree.
 const DELETE_UPSTREAM_CATALOG: Record<string, string[]> = {
-  "package.json": ["@sentry/solid", "@sentry/vite-plugin"],
+  "package.json": ["@sentry/solid", "@sentry/vite-plugin", "opentui-spinner"],
 }
+
+const DELETE_UPSTREAM_DEPENDENCIES = new Set(["opentui-spinner"])
 
 /**
  * Re-apply Kilo-specific scripts on top of the upstream-shaped scripts block,
@@ -421,7 +451,7 @@ export function isPackageJson(file: string): boolean {
 /**
  * Transform dependencies in package.json
  */
-function transformDependencies(deps: Record<string, string> | undefined): {
+export function transformDependencies(deps: Record<string, string> | undefined): {
   result: Record<string, string>
   changes: string[]
 } {
@@ -431,6 +461,10 @@ function transformDependencies(deps: Record<string, string> | undefined): {
   const changes: string[] = []
 
   for (const [name, version] of Object.entries(deps)) {
+    if (DELETE_UPSTREAM_DEPENDENCIES.has(name)) {
+      changes.push(`${name}: removed (incompatible OpenTUI runtime)`)
+      continue
+    }
     const newName = PACKAGE_NAME_MAP[name]
     if (newName) {
       result[newName] = version
@@ -549,12 +583,8 @@ export async function transformPackageJson(file: string, options: PackageJsonOpt
         }
       }
 
-      // 6. Preserve repository (Kilo-specific, upstream doesn't have this)
-      const ourRepo = ourPkg.repository
-      if (ourRepo && JSON.stringify(pkg.repository) !== JSON.stringify(ourRepo)) {
-        pkg.repository = ourRepo
-        changes.push(`repository: preserved Kilo's repository configuration`)
-      }
+      // 6. Preserve repository metadata so published packages keep Kilo links
+      fixRepository(pkg, ourPkg, changes)
 
       fixMetadata(pkg, relativePath, ourPkg, changes)
 

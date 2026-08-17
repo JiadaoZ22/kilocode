@@ -9,6 +9,7 @@ import path from "path"
 import fs from "fs/promises"
 import { TestProfile } from "./kilocode/test-profile"
 import { TestShard } from "./kilocode/test-shard"
+import { TestCli } from "./kilocode/test-cli"
 import { remove } from "../test/kilocode/cleanup"
 
 const root = path.resolve(import.meta.dir, "..")
@@ -28,9 +29,9 @@ if (argv.includes("--help") || argv.includes("-h")) {
       "",
       "Options:",
       "  --ci                 Enable JUnit XML output to .artifacts/unit/junit.xml",
-      "  --concurrency <N>    Max parallel processes (default: min(4, CPU count))",
+      "  --concurrency <N>    Max parallel processes (default: min(4, CPU count), env: KILO_TEST_CONCURRENCY)",
       "  --timeout <ms>       Per-test timeout passed to bun test (default: 60000)",
-      "  --file-timeout <ms>  Per-file process timeout (default: 300000)",
+      "  --file-timeout <ms>  Per-file process timeout (default: 300000, env: KILO_TEST_FILE_TIMEOUT)",
       "  --retries <N>        Extra attempts for failing files (default: 1)",
       "  --profile <name>     Run a curated test profile (env: KILO_TEST_PROFILE)",
       "  --shard <N/M>        Run one balanced file shard (env: KILO_TEST_SHARD)",
@@ -72,9 +73,39 @@ const dots = !verbose && (ci || argv.includes("--dots"))
 // Cap concurrency at 4 even on bigger runners: the bottleneck is shared
 // resources (ports, global filesystem like ~/.local/share/kilo), not CPU.
 // Eight parallel processes was triggering port/FS races, not going faster.
-const concurrency = opt("concurrency", Math.min(4, os.cpus().length))
+// kilocode_change start - allow CI to lower concurrency via env. On the 4-vCPU
+// Windows runner, the default (min(4, cpus)=4) oversubscribes: 4 heavy real-server
+// test files share 4 vCPUs (~1 each) and blow their per-test timeouts.
+// `KILO_TEST_CONCURRENCY` lets the workflow throttle Windows without affecting the
+// local default. An explicit `--concurrency` flag wins.
+const concurrencyEnv = (() => {
+  const raw = process.env.KILO_TEST_CONCURRENCY?.trim()
+  if (!raw) return undefined
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1) {
+    console.error(`Invalid KILO_TEST_CONCURRENCY "${raw}"; expected a positive integer`)
+    process.exit(2)
+  }
+  return value
+})()
+const concurrency = opt("concurrency", concurrencyEnv ?? Math.min(4, os.cpus().length))
+// kilocode_change end
 const timeout = opt("timeout", 60000)
-const deadline = opt("file-timeout", 300000)
+// kilocode_change start - allow CI to raise the per-file kill deadline via env. On Windows,
+// heavy real-server files (e.g. config-overlay) legitimately run ~270s serially, only ~30s
+// under the 300s default; raising it there prevents a slow-but-healthy run from being killed.
+const fileTimeoutEnv = (() => {
+  const raw = process.env.KILO_TEST_FILE_TIMEOUT?.trim()
+  if (!raw) return undefined
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1) {
+    console.error(`Invalid KILO_TEST_FILE_TIMEOUT "${raw}"; expected a positive integer (ms)`)
+    process.exit(2)
+  }
+  return value
+})()
+const deadline = opt("file-timeout", fileTimeoutEnv ?? 300000)
+// kilocode_change end
 const retries = opt("retries", 1)
 const flag = text("profile")
 const env = process.env.KILO_TEST_PROFILE?.trim() || undefined
@@ -155,7 +186,28 @@ if (shard && shard.total > candidates.length) {
   console.error(`Test shard count ${shard.total} exceeds selected file count ${candidates.length}`)
   process.exit(2)
 }
-const weight = (file: string) => Bun.file(path.join(root, "test", file)).size
+// kilocode_change start - shard by estimated DURATION, not file size. File size is a poor
+// proxy: run-process.test.ts is ~7 KB but ~230s, while config-overlay is the single slowest
+// file — under size-weighting both landed in the same shard, stacking the two heaviest files.
+// DURATION_HINTS are max observed per-file durations (ms) from real Windows CI runs; the LPT
+// splitter places the highest-weight files first, so hinted heavy files get spread across
+// distinct shards. Unhinted files fall back to size (a fine proxy among the fast majority);
+// hint values (tens of thousands of ms) dominate byte sizes, so heavy files always sort first.
+// Refresh these from observed CI durations when the suite changes materially.
+const DURATION_HINTS: Record<string, number> = {
+  "kilocode/server/config-overlay.test.ts": 270_000,
+  "cli/run/run-process.test.ts": 233_000,
+  "snapshot/snapshot.test.ts": 165_000,
+  "session/prompt.test.ts": 128_000,
+  "tool/shell.test.ts": 95_000,
+  "kilocode/background-process.test.ts": 94_000,
+  "provider/provider.test.ts": 90_000,
+  "kilocode/indexing-startup.test.ts": 88_000,
+  "kilocode/daemon.test.ts": 65_000,
+  "tool/task.test.ts": 64_000,
+}
+const weight = (file: string) => DURATION_HINTS[file] ?? Bun.file(path.join(root, "test", file)).size
+// kilocode_change end
 const files = shard ? TestShard.split(candidates, weight, shard.total)[shard.index - 1] : candidates
 
 if (files.length === 0) {
@@ -178,12 +230,23 @@ type Result = {
   attempts: number
 }
 
+type Proc = ReturnType<typeof Bun.spawn>
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
 const xmldir = ci ? path.join(os.tmpdir(), `opencode-junit-${process.pid}`) : ""
 if (ci) await fs.mkdir(xmldir, { recursive: true })
+// kilocode_change start
+const supplied = process.env[TestCli.ENV]
+const built = supplied ? { binary: supplied, dir: undefined } : { binary: await TestCli.build(root), dir: undefined }
+
+async function cleanBinary() {
+  if (!built.dir) return
+  await fs.rm(built.dir, { recursive: true, force: true })
+}
+// kilocode_change end
 
 const counter = { done: 0 }
 const pad = String(files.length).length
@@ -199,6 +262,74 @@ const marks = {
   timeout: "T",
 } as const
 const legend = `Legend: ${marks.pass}=pass ${marks.retry}=pass-after-retry ${marks.fail}=fail ${marks.timeout}=timeout`
+
+function drain(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  const promise = (async () => {
+    let text = ""
+    while (true) {
+      const chunk = await reader.read()
+      if (chunk.done) return text + decoder.decode()
+      text += decoder.decode(chunk.value, { stream: true })
+    }
+  })()
+  return {
+    promise,
+    close: () => reader.cancel().catch(() => undefined),
+  }
+}
+
+async function signal(proc: Proc, sig: "SIGTERM" | "SIGKILL") {
+  if (process.platform === "win32") {
+    const args = ["/pid", String(proc.pid), "/T"]
+    if (sig === "SIGKILL") args.push("/F")
+    const kill = Bun.spawn(["taskkill", ...args], {
+      stdout: "ignore",
+      stderr: "ignore",
+      windowsHide: true,
+    })
+    await kill.exited
+    return
+  }
+
+  const tree = Bun.spawn(["ps", "-axo", "pid=,ppid="], {
+    stdout: "pipe",
+    stderr: "ignore",
+  })
+  const [code, text] = await Promise.all([tree.exited, new Response(tree.stdout).text()])
+  const rows = code === 0 ? text.trim().split("\n") : []
+  const children = new Map<number, number[]>()
+  for (const row of rows) {
+    const [pid, parent] = row.trim().split(/\s+/).map(Number)
+    if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(parent)) continue
+    const list = children.get(parent) ?? []
+    list.push(pid)
+    children.set(parent, list)
+  }
+  const collect = (pid: number): number[] => (children.get(pid) ?? []).flatMap((child) => [...collect(child), child])
+  for (const pid of [...collect(proc.pid), proc.pid]) {
+    for (const target of [-pid, pid]) {
+      try {
+        process.kill(target, sig)
+      } catch (error) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "ESRCH") continue
+        // A kill failure (e.g. EPERM in a sandboxed runner) must not take down the whole run.
+        console.error(`warn: failed to signal ${target} with ${sig}:`, error)
+      }
+    }
+  }
+}
+
+async function terminate(proc: Proc) {
+  if (proc.exitCode !== null) return
+  await signal(proc, "SIGTERM")
+  const exited = Symbol("exited")
+  const result = await Promise.race([proc.exited.then(() => exited), Bun.sleep(2_000)])
+  if (result === exited) return
+  await signal(proc, "SIGKILL")
+  await Promise.race([proc.exited, Bun.sleep(2_000)])
+}
 
 // ---------------------------------------------------------------------------
 // Run a single test file
@@ -218,24 +349,36 @@ async function run(file: string): Promise<Result> {
 
   const proc = Bun.spawn(cmd, {
     cwd: root,
+    env: { ...process.env, [TestCli.ENV]: built.binary },
     stdout: "pipe",
     stderr: "pipe",
     windowsHide: true,
+    detached: process.platform !== "win32",
   })
   active.set(proc.pid, proc)
 
-  const timer = setTimeout(() => {
-    killed.value = true
-    proc.kill()
-  }, deadline)
-
-  const stdout = new Response(proc.stdout).text()
-  const stderr = new Response(proc.stderr).text()
-  const code = await proc.exited.finally(async () => {
-    clearTimeout(timer)
+  const stdout = drain(proc.stdout)
+  const stderr = drain(proc.stderr)
+  const code = await Promise.race([
+    proc.exited.then((value) => ({ timedout: false, value })),
+    Bun.sleep(deadline).then(() => ({ timedout: true, value: -1 })),
+  ]).then(async (result) => {
+    if (result.timedout) {
+      killed.value = true
+      await terminate(proc)
+    }
     await finish(proc)
+    return result.timedout ? (proc.exitCode ?? result.value) : result.value
   })
-  const output = await Promise.all([stdout, stderr])
+  const output = await Promise.race([
+    Promise.all([stdout.promise, stderr.promise]).then((value) => ({ closed: true, value })),
+    Bun.sleep(2_000).then(() => ({ closed: false, value: ["", ""] as [string, string] })),
+  ]).then(async (result) => {
+    if (result.closed) return result.value
+    await signal(proc, "SIGKILL")
+    await Promise.all([stdout.close(), stderr.close()])
+    return Promise.all([stdout.promise, stderr.promise])
+  })
 
   return {
     file,
@@ -254,7 +397,7 @@ function finish(proc: ReturnType<typeof Bun.spawn>) {
   if (found) return found
 
   const promise = (async () => {
-    await proc.exited
+    await Promise.race([proc.exited, Bun.sleep(2_000)])
     await cleanup(proc.pid)
   })().finally(() => {
     active.delete(proc.pid)
@@ -269,10 +412,9 @@ function shutdown(code: number) {
   stopping.promise = (async () => {
     stopped.value = true
     const children = [...active.values()]
-    for (const proc of children) {
-      if (proc.exitCode === null) proc.kill("SIGKILL")
-    }
+    await Promise.all(children.map(terminate))
     await Promise.all(children.map(finish))
+    await cleanBinary()
     process.exit(code)
   })()
   return stopping.promise
@@ -449,6 +591,8 @@ if (ci) {
     console.error("cleanup failed:", err)
   })
 }
+
+await cleanBinary()
 
 process.exit(failures.length > 0 ? 1 : 0)
 
