@@ -31,4 +31,12 @@ describe("RemoteCommand instance advertisement (K1 W1)", () => {
     const advertisement = buildInstanceAdvertisement("/")
     expect(advertisement.projectName).toBe("/")
   })
+
+  test("buildInstanceAdvertisement omits the additive build field when the base version matches the installation version", () => {
+    // Outside compiled binaries KILO_BASE_VERSION is undefined, so
+    // InstallationBaseVersion falls back to InstallationVersion and the
+    // advertisement must keep the legacy wire shape (no `build` field).
+    const advertisement = buildInstanceAdvertisement("/Users/igor/projects/my-app")
+    expect(advertisement.build).toBeUndefined()
+  })
 })

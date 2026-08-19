@@ -3,7 +3,7 @@
 // Used by both `kilo remote` (explicit CLI) and `enableRemote()` (covers `/remote`
 // and KILO_REMOTE / remote_control auto-enable) so all enable paths advertise
 // identically.
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { RemoteVersion } from "@/kilo-sessions/remote-version"
 import os from "node:os"
 import path from "node:path"
 import type { RemoteProtocol } from "@/kilo-sessions/remote-protocol"
@@ -16,6 +16,9 @@ export function buildInstanceAdvertisement(directory: string): RemoteProtocol.In
   return {
     name: truncate(os.hostname(), 64),
     projectName: truncate(path.basename(directory) || directory, 64),
-    version: truncate(InstallationVersion, 32),
+    // Base release version keeps relay/mobile version-gating compatible on
+    // preview builds; the full build identity rides in `build` (additive).
+    version: truncate(RemoteVersion.current.protocol, 32),
+    ...(RemoteVersion.current.build ? { build: truncate(RemoteVersion.current.build, 64) } : {}),
   }
 }

@@ -1,5 +1,5 @@
 import { RemoteProtocol } from "@/kilo-sessions/remote-protocol"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { RemoteVersion } from "@/kilo-sessions/remote-version" // kilocode_change
 
 export namespace RemoteWS {
   export type SessionInfo = RemoteProtocol.SessionInfo
@@ -260,7 +260,12 @@ export namespace RemoteWS {
               // attachments) — an independent additive heartbeat field.
               send({
                 type: "heartbeat",
-                protocolVersion: InstallationVersion,
+                // kilocode_change - advertise the base release version so relay
+                // version-gating works on preview builds; the full build
+                // identity rides in buildVersion (see remote-version.ts).
+                protocolVersion: RemoteVersion.current.protocol,
+                ...(RemoteVersion.current.build ? { buildVersion: RemoteVersion.current.build } : {}),
+                // kilocode_change end
                 capabilities: { attachments: true },
                 sessions: fresh.sessions,
                 ...(fresh.instance ? { instance: fresh.instance } : {}),
@@ -305,7 +310,10 @@ export namespace RemoteWS {
               // on cold start) and keep waiters pending for a future fresh send.
               send({
                 type: "heartbeat",
-                protocolVersion: InstallationVersion,
+                // kilocode_change start - same wire-version fields as the fresh send
+                protocolVersion: RemoteVersion.current.protocol,
+                ...(RemoteVersion.current.build ? { buildVersion: RemoteVersion.current.build } : {}),
+                // kilocode_change end
                 capabilities: { attachments: true },
                 sessions: lastGood ?? [],
               })

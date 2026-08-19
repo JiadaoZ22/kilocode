@@ -25,7 +25,10 @@ export namespace RemoteProtocol {
   export const InstanceAdvertisement = z.object({
     name: z.string().min(1).max(64), // os.hostname(), truncated
     projectName: z.string().min(1).max(64), // basename(Instance.directory), truncated
-    version: z.string().max(32).optional(), // InstallationVersion, truncated
+    version: z.string().max(32).optional(), // InstallationBaseVersion, truncated
+    // kilocode_change - full InstallationVersion when it differs from `version`
+    // (preview/dev builds). Additive and optional; legacy relays ignore it.
+    build: z.string().max(64).optional(),
   })
   export type InstanceAdvertisement = z.infer<typeof InstanceAdvertisement>
 
@@ -43,6 +46,11 @@ export namespace RemoteProtocol {
     type: z.literal("heartbeat"),
     sessions: z.array(SessionInfo),
     protocolVersion: z.string().optional(), // lets relay detect CLI capabilities without probing commands
+    // kilocode_change - full InstallationVersion when it differs from
+    // protocolVersion (preview/dev builds advertise InstallationBaseVersion as
+    // protocolVersion so relay version-gating keeps working). Additive and
+    // optional; legacy relays ignore it.
+    buildVersion: z.string().optional(),
     instance: InstanceAdvertisement.optional(), // kilocode_change - K1 W1
     capabilities: Capabilities,
   })

@@ -120,6 +120,12 @@ export namespace KiloSessions {
   type BootstrapOutcome = { ok: true; ingestPath: string } | { ok: false; reason: string }
   const bootstrapInflight = new Map<string, Promise<BootstrapOutcome>>()
 
+  // kilocode_change - ids already checked/ensured this process, so the
+  // per-heartbeat ensureShared() below does not re-read storage or re-POST
+  // /api/session on every tick. Entries are removed on failure so a later
+  // heartbeat retries.
+  const ensured = new Set<string>()
+
   function clearCache() {
     clearInFlightCache(tokenKey)
     clearInFlightCache(tokenValidKey)
@@ -707,6 +713,10 @@ export namespace KiloSessions {
           ),
         )
         const sessions = results.filter((r): r is NonNullable<typeof r> => !!r)
+        // kilocode_change - bootstrap advertised sessions that have no cloud
+        // record yet (see ensureShared above). Fire-and-forget so a slow
+        // ingest POST never delays the heartbeat payload.
+        for (const s of sessions) ensureShared(s.id)
         const instance = instanceAdvertisement
         return { type: "heartbeat", sessions, ...(instance ? { instance } : {}) }
       }
@@ -907,6 +917,30 @@ export namespace KiloSessions {
     void fullSync(sessionId).catch((error) => log.error("share full sync failed", { sessionId, error }))
 
     return result
+  }
+
+  // kilocode_change - fix mobile "not found" on resumed sessions: bootstrap is
+  // otherwise only triggered by the watch(Session.Event.Created) handler, which
+  // never fires for sessions created before this process started (or while
+  // remote was disabled). The heartbeat advertises those sessions, so the
+  // mobile app lists them but the cloud has no content record to open. Ensure
+  // each advertised session is bootstrapped once per process; failures clear
+  // the ensured mark so a later heartbeat retries.
+  function ensureShared(sessionId: string) {
+    if (ensured.has(sessionId)) return
+    ensured.add(sessionId)
+    void (async () => {
+      // A missing record rejects (NotFoundError); treat it as "never
+      // bootstrapped" rather than a failure, same as readShare().
+      const existing = await get(sessionId).catch(() => undefined)
+      if (existing?.ingestPath) return
+      const result = await create(sessionId)
+      if (result.id) return
+      ensured.delete(sessionId)
+    })().catch((error) => {
+      ensured.delete(sessionId)
+      log.warn("advertised session bootstrap failed", { sessionId, error: String(error) })
+    })
   }
 
   // Track an in-flight bootstrap for `sessionId` so callers that race the

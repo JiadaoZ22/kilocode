@@ -4,7 +4,7 @@
  * Provides /profile and /teams commands that are only visible when connected to Kilo Gateway.
  */
 
-import { createMemo } from "solid-js"
+import { createMemo, createResource } from "solid-js"
 import { useBindings } from "@tui/keymap"
 import { useSync } from "@tui/context/sync"
 import { useRoute } from "@tui/context/route"
@@ -43,6 +43,12 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
   // Only show Kilo commands when connected to Kilo Gateway
   const isKiloConnected = createMemo(() => {
     return sync.data.provider_next.connected.includes("kilo")
+  })
+  // provider_next.connected includes the kilo provider even with an anonymous key,
+  // so check the actual stored credential before allowing remote relay.
+  const [kiloAuthStatus] = createResource(() => sdk.client.kilo.authStatus())
+  const isKiloAuthenticated = createMemo(() => {
+    return kiloAuthStatus()?.data?.authenticated === true
   })
   useBindings(() => ({
     commands: [
@@ -94,8 +100,18 @@ export function registerKiloCommands(useSDK: () => UseSDK) {
         category: "Kilo",
         slashName: "remote",
         enabled: isKiloConnected(),
-        hidden: !isKiloConnected(),
+        hidden: false,
         run: async () => {
+          if (!isKiloAuthenticated()) {
+            dialog.replace(() => (
+              <DialogAlert
+                title="Kilo login required"
+                message="Remote session relay requires a Kilo account. Run `kilo auth login` and restart the CLI."
+              />
+            ))
+            return
+          }
+
           try {
             const current = await sdk.client.remote.status()
 

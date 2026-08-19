@@ -678,6 +678,62 @@ describe("KiloSessions.detachRemoteSession heartbeat fence (K1 W1)", () => {
       // instant (status is set directly, not via a real retry schedule).
     }, 30000)
   }
+
+  async function waitFor(check: () => Promise<boolean>, label: string) {
+    for (let i = 0; i < 100; i++) {
+      if (await check()) return
+      await new Promise((r) => setTimeout(r, 10))
+    }
+    throw new Error(`timed out waiting for ${label}`)
+  }
+
+  // kilocode_change - regression: a session advertised by the heartbeat but
+  // never bootstrapped in this process (created before this process started
+  // and resumed, so watch(Session.Event.Created) never fired for it here) must
+  // be POSTed to /api/session when advertised; otherwise the mobile app lists
+  // it via heartbeat but shows "not found" on open.
+  test("bootstraps an advertised session whose share record is missing (resumed session)", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await provide({
+      directory: tmp.path,
+      fn: async () => {
+        const posts: string[] = []
+        const upstream = globalThis.fetch
+        globalThis.fetch = mock(async (input: unknown, init?: { method?: string; body?: unknown }) => {
+          if (String(input).endsWith("/api/session") && init?.method === "POST") posts.push(String(init.body))
+          return upstream(input as never, init as never)
+        }) as unknown as typeof fetch
+
+        await KiloSessions.enableRemote()
+        const id = await setupSession()
+
+        const { AppRuntime } = await import("@/effect/app-runtime")
+        const { Storage } = await import("@/storage/storage")
+
+        const shared = () =>
+          AppRuntime.runPromise(
+            Storage.Service.use((svc) =>
+              svc.read(["session_share", id]).pipe(Effect.orElseSucceed(() => undefined)),
+            ),
+          )
+
+        // The watch(Session.Event.Created) handler bootstraps freshly created
+        // sessions; wait for it, then drop the share record to reproduce the
+        // resumed-session state: advertised by heartbeat, unknown to ingest.
+        await waitFor(async () => (await shared()) !== undefined, `created bootstrap for ${id}`)
+        await AppRuntime.runPromise(Storage.Service.use((svc) => svc.remove(["session_share", id])))
+        posts.length = 0
+
+        await AppRuntime.runPromise(SessionStatus.Service.use((svc) => svc.set(id, { type: "busy" })))
+
+        const payload = await capturedGetSessions()()
+        expect(payload.sessions.some((s) => s.id === id)).toBe(true)
+
+        await waitFor(async () => (await shared()) !== undefined, `advertised bootstrap for ${id}`)
+        expect(posts.some((body) => body.includes(id))).toBe(true)
+      },
+    })
+  }, 30000)
 })
 
 // DEF-3 part 1: heartbeat per-session status must reflect pending

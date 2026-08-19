@@ -355,6 +355,11 @@ for (const item of targets) {
       // kilocode_change start
       KILO_BWRAP_SHA256: bwrap ? `'${bwrap}'` : "undefined",
       KILO_BUILD_KIND: Script.release ? `'release'` : `'source'`,
+      // Base release version (package.json) for the remote-session wire protocol.
+      // Preview builds set Script.version to `0.0.0-<channel>-<date>`, which the
+      // relay may treat as an unknown CLI; the base version keeps version-gated
+      // features (e.g. mobile session attach) working.
+      KILO_BASE_VERSION: `'${pkg.version}'`,
       // kilocode_change end
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
     },
