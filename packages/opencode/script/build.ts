@@ -258,7 +258,7 @@ const targets = singleFlag
   : allTargets
 
 // kilocode_change start
-await $`rm -rf dist`
+await fs.promises.rm(path.resolve(dir, "dist"), { recursive: true, force: true })
 const [kiloConsoleDist, kiloSandboxWorker, kiloSandboxNetwork] = await Promise.all([
   buildKiloConsole(),
   KiloSandboxWorker.bundle(),

@@ -211,6 +211,32 @@ Then run it with:
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
+#### Building on Windows
+
+A PowerShell helper is provided at `script/build-windows.ps1`:
+
+```powershell
+.\script\build-windows.ps1
+```
+
+This installs dependencies and produces `packages/opencode/dist/@kilocode/cli-windows-x64/bin/kilo.exe`.
+
+If you prefer to run the build steps manually:
+
+```powershell
+bun install
+bun run --cwd packages/opencode script/build.ts --single --skip-install
+```
+
+**Windows-specific notes:**
+
+- The repo expects LF line endings. If Git reports many files as modified with zero-line diffs, run:
+  ```powershell
+  git config core.filemode false
+  git config core.autocrlf false
+  ```
+- Bun uses symlinks in `node_modules/.bun/`. On Windows, symlinks work best with Developer Mode enabled or when running from an elevated terminal. If you see empty placeholder files under `node_modules/.bun/` causing `require` errors, enable Developer Mode or reinstall from an elevated shell.
+
 ### Understanding bun dev vs kilo
 
 During development, `bun dev` is the local equivalent of the built `kilo` command. Both run the same CLI interface:
