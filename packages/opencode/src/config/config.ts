@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder" // kilocode_change
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
@@ -1155,5 +1156,10 @@ export const node = LayerNode.make({
   layer: layer,
   deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient, Git.node, EffectFlock.node], // kilocode_change
 })
+
+// kilocode_change start - build from the LayerNode graph (same pattern as Session.defaultLayer);
+// consumed by KilocodeBootstrap.defaultLayer
+export const defaultLayer: Layer.Layer<Service> = Layer.suspend(() => AppNodeBuilder.build(node))
+// kilocode_change end
 
 export * as Config from "./config"

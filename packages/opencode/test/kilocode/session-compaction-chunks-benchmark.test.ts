@@ -7,8 +7,8 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Reference } from "@opencode-ai/core/reference"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Global } from "@opencode-ai/core/global"
 import { Database } from "@opencode-ai/core/database/database"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Plugin } from "../../src/plugin"
 import { provideTestInstance } from "../fixture/fixture"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -155,31 +155,32 @@ function delayedRuntime(delayMs: number) {
   return {
     calls,
     rt: ManagedRuntime.make(
-      Layer.mergeAll(SessionCompaction.layer.pipe(Layer.provide(processor)), processor, bus).pipe(
+      Layer.mergeAll(SessionCompaction.defaultLayer.pipe(Layer.provide(processor)), processor, bus).pipe(
         Layer.provide(ProviderTest.fake({ model }).layer),
         Layer.provide(SessionNs.defaultLayer),
-        Layer.provide(Agent.defaultLayer),
-        Layer.provide(Plugin.defaultLayer),
+        Layer.provide(AppNodeBuilder.build(Agent.node)),
+        Layer.provide(AppNodeBuilder.build(Plugin.node)),
         Layer.provide(SyncEvent.defaultLayer),
         Layer.provide(EventV2Bridge.defaultLayer),
         Layer.provide(RuntimeFlags.layer()),
         Layer.provide(
-          Reference.layer.pipe(
-            Layer.provide(
+          AppNodeBuilder.build(Reference.node, [
+            [
+              RepositoryCache.node,
               Layer.mock(RepositoryCache.Service)({
                 ensure: () => Effect.die("unexpected Git materialization"),
               }),
-            ),
-            Layer.provide(
+            ],
+            [
+              EventV2.node,
               Layer.mock(EventV2.Service)({
                 publish: (definition, data) =>
                   Effect.succeed({ id: EventV2.ID.make("evt_reference"), type: definition.type, data }),
               }),
-            ),
-            Layer.provide(Global.defaultLayer),
-          ),
+            ],
+          ]),
         ),
-        Layer.provide(Database.defaultLayer),
+        Layer.provide(AppNodeBuilder.build(Database.node)),
         Layer.provide(bus),
         Layer.provide(
           Layer.mock(Config.Service)({
