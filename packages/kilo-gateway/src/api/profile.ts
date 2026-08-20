@@ -64,6 +64,12 @@ export function defaultOrganizationId(profile: KilocodeProfile): string | undefi
  * @param token - Authentication token
  * @param organizationId - Optional organization ID for team balance
  */
+// Transient network/proxy flaps are expected here; keep them out of the TUI
+// console overlay unless explicitly debugging (KILO_GATEWAY_DEBUG=1).
+const debug = (...args: unknown[]) => {
+  if (process.env.KILO_GATEWAY_DEBUG) console.warn(...args)
+}
+
 export async function fetchBalance(token: string, organizationId?: string): Promise<KilocodeBalance | null> {
   try {
     const headers: Record<string, string> = {
@@ -77,14 +83,14 @@ export async function fetchBalance(token: string, organizationId?: string): Prom
     const response = await fetch(`${KILO_API_BASE}/api/profile/balance`, { headers })
 
     if (!response.ok) {
-      console.warn(`Failed to fetch balance: ${response.status}`)
+      debug(`Failed to fetch balance: ${response.status}`)
       return null
     }
 
     const data = (await response.json()) as { balance?: number }
     return { balance: data.balance ?? 0 }
   } catch (error) {
-    console.warn("Error fetching balance:", error)
+    debug("Error fetching balance:", error)
     return null
   }
 }

@@ -24,7 +24,7 @@ tmp
 dist
 ts-dist
 storybook-static
-.dist-old-running.deleted/
+.dist-old-running*.deleted/
 .turbo
 **/.serena
 .serena/
